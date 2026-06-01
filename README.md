@@ -34,19 +34,28 @@ Every run creates a **session** — persisted to `~/.forge/sessions/<id>/`. Sess
 
 ## Installation
 
-**Requirements:** Python 3.11+, [uv](https://github.com/astral-sh/uv)
+### Homebrew (recommended)
 
 ```bash
-git clone <repo>
-cd forge
-uv venv .venv
-source .venv/bin/activate     # Windows: .venv\Scripts\activate
-uv pip install -e .
+brew tap Ddundee/forge
+brew install forge
 ```
 
 For web-app verification (Playwright):
 ```bash
 playwright install chromium
+```
+
+### From source
+
+**Requirements:** Python 3.11+, [uv](https://github.com/astral-sh/uv)
+
+```bash
+git clone https://github.com/Ddundee/forge.git
+cd forge
+uv venv .venv
+source .venv/bin/activate     # Windows: .venv\Scripts\activate
+uv pip install -e .
 ```
 
 ---
