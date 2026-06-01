@@ -16,6 +16,9 @@ def build(
                                           help="Deploy target: vercel, railway, fly.io"),
     max_cycles: int = typer.Option(5, "--max-cycles", help="Max fix iterations"),
 ) -> None:
+    from forge.config import load_keys
+    load_keys()
+
     from forge.session import Session
     from forge.overseer import Overseer
     from forge.ui.live_feed import LiveFeed
@@ -102,6 +105,9 @@ def sessions() -> None:
 
 @app.command()
 def resume(session_id: Optional[str] = typer.Argument(None)) -> None:
+    from forge.config import load_keys
+    load_keys()
+
     from forge.session import Session
     from forge.overseer import Overseer
     from forge.state_machine import Phase
