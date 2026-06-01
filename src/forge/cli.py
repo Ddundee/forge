@@ -35,6 +35,9 @@ def build(
         feed.push_event(session.phase, message)
 
     async def ask_user(question: str) -> str | None:
+        import sys
+        if not sys.stdin.isatty():
+            return None
         feed.stop()
         answer = typer.prompt(f"\n{question} (Enter to skip)", default="", show_default=False)
         feed.start()

@@ -1,7 +1,7 @@
 import json
 import subprocess
 from pathlib import Path
-from forge.agents.base import BaseAgent, AgentResult
+from forge.agents.base import BaseAgent, AgentResult, _extract_json
 from forge.router import ModelTier
 
 SYSTEM = """You are a test engineer. Write comprehensive tests for the project.
@@ -18,6 +18,7 @@ FRAMEWORK_CMD: dict[str, list[str]] = {
     "pytest": ["python", "-m", "pytest", "-v", "--tb=short"],
     "vitest": ["npx", "vitest", "run"],
     "jest": ["npx", "jest", "--no-coverage"],
+    "react-scripts": ["npx", "react-scripts", "test", "--watchAll=false", "--passWithNoTests"],
     "go-test": ["go", "test", "./..."],
 }
 
@@ -37,7 +38,7 @@ class TestAgent(BaseAgent):
         ]
         response = await self._call(messages)
         try:
-            test_files: list[dict] = json.loads(response)
+            test_files: list[dict] = json.loads(_extract_json(response))
         except json.JSONDecodeError:
             return AgentResult(success=False, output=response, error="invalid_json")
 
@@ -46,8 +47,21 @@ class TestAgent(BaseAgent):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(tf["content"])
 
+        # If the workspace is a CRA project, override to react-scripts test
+        pkg = workspace / "package.json"
+        if pkg.exists():
+            import json as _json
+            try:
+                pkg_data = _json.loads(pkg.read_text())
+                deps = {**pkg_data.get("dependencies", {}), **pkg_data.get("devDependencies", {})}
+                if "react-scripts" in deps:
+                    framework = "react-scripts"
+            except Exception:
+                pass
+
         cmd = FRAMEWORK_CMD.get(framework, ["python", "-m", "pytest", "-v"])
-        proc = subprocess.run(cmd, capture_output=True, text=True, cwd=workspace)
+        env = {**__import__("os").environ, "CI": "true"}
+        proc = subprocess.run(cmd, capture_output=True, text=True, cwd=workspace, env=env)
         output = proc.stdout + proc.stderr
         success = proc.returncode == 0
         return AgentResult(success=success, output=output,

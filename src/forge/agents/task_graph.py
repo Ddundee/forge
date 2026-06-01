@@ -1,5 +1,5 @@
 import json
-from forge.agents.base import BaseAgent, AgentResult
+from forge.agents.base import BaseAgent, AgentResult, _extract_json
 from forge.router import ModelTier
 
 SYSTEM = """You are a senior engineer breaking a product into coding tasks.
@@ -27,7 +27,7 @@ class TaskGraphAgent(BaseAgent):
         ]
         response = await self._call(messages)
         try:
-            tasks = json.loads(response)
+            tasks = json.loads(_extract_json(response))
             return AgentResult(success=True, output=json.dumps(tasks))
         except json.JSONDecodeError:
             return AgentResult(success=False, output=response, error="invalid_json")

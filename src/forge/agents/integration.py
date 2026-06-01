@@ -1,6 +1,6 @@
 import json
 from pathlib import Path
-from forge.agents.base import BaseAgent, AgentResult
+from forge.agents.base import BaseAgent, AgentResult, _extract_json
 from forge.router import ModelTier
 
 SYSTEM = """You are a senior engineer responsible for wiring a project together.
@@ -25,7 +25,7 @@ class IntegrationAgent(BaseAgent):
         ]
         response = await self._call(messages)
         try:
-            patches: list[dict] = json.loads(response)
+            patches: list[dict] = json.loads(_extract_json(response))
         except json.JSONDecodeError:
             return AgentResult(success=False, output=response, error="invalid_json")
 

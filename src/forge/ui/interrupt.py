@@ -12,6 +12,8 @@ class InterruptHandler:
         self._task: asyncio.Task | None = None
 
     def start(self) -> None:
+        if not sys.stdin.isatty():
+            return
         self._task = asyncio.create_task(self._listen())
 
     def stop(self) -> None:

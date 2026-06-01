@@ -1,5 +1,5 @@
 import json
-from forge.agents.base import BaseAgent, AgentResult
+from forge.agents.base import BaseAgent, AgentResult, _extract_json
 from forge.router import ModelTier
 
 SYSTEM = """You are a software architect. Given a product spec, choose the ideal tech stack and project structure.
@@ -24,7 +24,8 @@ class ArchitectureAgent(BaseAgent):
         ]
         response = await self._call(messages)
         try:
-            json.loads(response)
-            return AgentResult(success=True, output=response)
+            cleaned = _extract_json(response)
+            json.loads(cleaned)
+            return AgentResult(success=True, output=cleaned)
         except json.JSONDecodeError:
             return AgentResult(success=False, output=response, error="invalid_json")

@@ -1,5 +1,5 @@
 import json
-from forge.agents.base import BaseAgent, AgentResult
+from forge.agents.base import BaseAgent, AgentResult, _extract_json
 from forge.router import ModelTier
 
 SYSTEM = """You are an expert product architect. Take a raw idea and produce a clear, buildable product spec.
@@ -31,7 +31,7 @@ class IdeationAgent(BaseAgent):
 
         response = await self._call(messages)
         try:
-            spec = json.loads(response)
+            spec = json.loads(_extract_json(response))
             return AgentResult(success=True, output=json.dumps(spec))
         except json.JSONDecodeError:
             return AgentResult(success=True, output=response, error="question")
