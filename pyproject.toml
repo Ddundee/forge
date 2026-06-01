@@ -1,0 +1,30 @@
+[project]
+name = "forge"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "typer[all]>=0.12",
+    "rich>=13",
+    "litellm>=1.40",
+    "httpx>=0.27",
+    "tomli-w>=1.0",
+    "playwright>=1.44",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "pytest-mock>=3.14",
+]
+
+[project.scripts]
+forge = "forge.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
