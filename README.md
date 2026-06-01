@@ -37,7 +37,7 @@ Every run creates a **session** — persisted to `~/.forge/sessions/<id>/`. Sess
 ### Homebrew (recommended)
 
 ```bash
-brew tap Ddundee/forge
+brew tap Ddundee/forge https://github.com/Ddundee/forge
 brew install forge
 ```
 
