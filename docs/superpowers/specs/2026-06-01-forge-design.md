@@ -132,7 +132,7 @@ Built with `rich`. A persistent dashboard updates in place:
  [ ] Wire auth into frontend              —             waiting
 
  ─────────────────────────────────────────────────────────────────────────
- [i] interrupt   [r] resume   [s] session info   [q] quit & save
+ [i] interrupt   [r] resume (after interrupt)   [s] session info   [q] quit & save
 ```
 
 - **Overseer box** always shows what the brain is currently thinking/deciding
@@ -158,7 +158,7 @@ forge logs [id]           # tail full agent logs for a session
 ```sql
 sessions    — id, idea, spec, phase, cycle, created_at, config_json
 tasks       — id, session_id, title, type, status, assigned_model, output, deps_json
-artifacts   — id, session_id, file_path, content, version
+artifacts   — id, session_id, file_path, content_snapshot, version  -- snapshot at write time; live files are in workspace/
 llm_calls   — id, task_id, provider, model, tokens_in, tokens_out, cost_usd, response
 events      — id, session_id, timestamp, phase, message   -- drives the live feed
 ```
