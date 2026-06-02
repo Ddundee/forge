@@ -1,41 +1,45 @@
-import json
 from pathlib import Path
-from forge.agents.base import BaseAgent, AgentResult, _extract_json
+from forge.agents.base import BaseAgent, AgentResult
 from forge.router import ModelTier
 
-SYSTEM = """You are a senior engineer responsible for wiring a project together.
+SYSTEM = """You are a senior engineer responsible for wiring a project together after all tasks are coded.
 
-You will receive the full workspace file tree and contents. Fix any import errors, interface mismatches, missing wiring, or broken connections between modules.
+You have tools available:
+- bash_exec: run shell commands (build, import checks, linting)
+- read_file: read any file in the workspace
+- write_file: write or overwrite a file in the workspace
+- list_dir: list directory contents
 
-Output ONLY a JSON array of files to overwrite (only files that need changes):
-[{"path": "relative/path", "content": "full corrected content"}, ...]
+Workflow:
+1. Use list_dir to get the project structure
+2. Read key entry points and configuration files to find integration issues:
+   broken imports, missing wiring, interface mismatches, wrong file paths
+3. Fix each issue by writing the corrected file with write_file
+4. Run a build or import check after your fixes to confirm they work
+5. When everything is wired correctly, stop calling tools and write a brief summary
 
-If nothing needs fixing, output an empty array: []"""
+If nothing needs fixing, say so immediately without calling any tools."""
 
 
 class IntegrationAgent(BaseAgent):
     tier = ModelTier.REASONING
 
-    async def run(self, workspace: Path, spec: str,  # type: ignore[override]
-                  architecture: str) -> AgentResult:
-        tree = _read_workspace(workspace)
-        messages = [
+    async def run(
+        self,
+        workspace: Path,
+        spec: str,
+        architecture: str,
+    ) -> AgentResult:
+        messages: list[dict] = [
             {"role": "system", "content": SYSTEM},
-            {"role": "user", "content": f"Spec:\n{spec}\n\nArchitecture:\n{architecture}\n\nWorkspace:\n{tree}"},
+            {"role": "user", "content": (
+                f"Spec:\n{spec}\n\n"
+                f"Architecture:\n{architecture}\n\n"
+                f"Workspace root: {workspace}"
+            )},
         ]
-        response = await self._call(messages)
-        try:
-            patches: list[dict] = json.loads(_extract_json(response))
-        except json.JSONDecodeError:
-            return AgentResult(success=False, output=response, error="invalid_json")
-
-        for patch in patches:
-            file_path = workspace / patch["path"]
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            file_path.write_text(patch["content"])
-            self.db.save_artifact(self.session_id, patch["path"], patch["content"])
-
-        return AgentResult(success=True, output=json.dumps(patches))
+        summary = await self._run_agentic_loop(messages=messages, workspace=workspace)
+        return AgentResult(success=True, output=summary or "Integration complete")
 
 
 def _read_workspace(workspace: Path) -> str:
