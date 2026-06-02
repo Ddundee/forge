@@ -38,9 +38,17 @@ def build(
         import sys
         if not sys.stdin.isatty():
             return None
+        # Stop the interrupt handler first — it holds the terminal in raw mode
+        # via tty.setraw(). Prompting while raw mode is active silently drops
+        # all keystrokes. The handler's finally block restores the terminal,
+        # but we must yield to the event loop so that cancellation propagates
+        # before we call typer.prompt().
+        handler.stop()
+        await asyncio.sleep(0)
         feed.stop()
         answer = typer.prompt(f"\n{question} (Enter to skip)", default="", show_default=False)
         feed.start()
+        handler.start()
         return answer or None
 
     async def on_interrupt(redirect: str) -> None:
