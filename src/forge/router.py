@@ -58,6 +58,7 @@ class LLMRouter:
     async def complete(self, tier: ModelTier, messages: list[dict],
                        **kwargs) -> CallResult:
         model = self._models[tier]
+        kwargs.setdefault("timeout", 120)
         response = await litellm.acompletion(model=model, messages=messages, **kwargs)
         usage = response.usage
         try:
@@ -81,6 +82,7 @@ class LLMRouter:
     ) -> LoopResult:
         model = self._models[tier]
         call_kwargs: dict[str, object] = {"model": model, "messages": messages, **kwargs}
+        call_kwargs.setdefault("timeout", 120)
         if tools:
             call_kwargs["tools"] = tools
         response = await litellm.acompletion(**call_kwargs)

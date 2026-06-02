@@ -86,6 +86,9 @@ def build(
             await overseer.run(ask_user=ask_user)
         except KeyboardInterrupt:
             console.print("\n[yellow]Interrupted. Session saved.[/yellow]")
+        except Exception as exc:
+            console.print(f"\n[red]Error:[/red] {exc}")
+            console.print("[dim]Session saved — resume with:[/dim] forgecli resume")
         finally:
             handler.stop()
             feed.stop()

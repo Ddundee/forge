@@ -49,6 +49,8 @@ class LiveFeed:
     _start_time: float = field(default_factory=time.monotonic, repr=False)
     _live: Live | None = field(default=None, repr=False)
     _lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
+    _running: bool = field(default=False, repr=False)
+    _refresh_thread: threading.Thread | None = field(default=None, repr=False)
 
     def push_event(self, phase: Phase, message: str) -> None:
         with self._lock:
@@ -159,13 +161,24 @@ class LiveFeed:
         )
         return layout
 
+    def _auto_refresh(self) -> None:
+        while self._running:
+            time.sleep(1)
+            with self._lock:
+                if self._live and self._running:
+                    self._live.update(self._render())
+
     def start(self) -> "LiveFeed":
         self._start_time = time.monotonic()
+        self._running = True
         self._live = Live(self._render(), refresh_per_second=4, screen=True)
         self._live.start()
+        self._refresh_thread = threading.Thread(target=self._auto_refresh, daemon=True)
+        self._refresh_thread.start()
         return self
 
     def stop(self) -> None:
+        self._running = False
         if self._live:
             self._live.stop()
             self._live = None
