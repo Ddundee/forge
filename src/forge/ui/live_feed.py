@@ -91,7 +91,7 @@ class LiveFeed:
         return layout
 
     def start(self) -> "LiveFeed":
-        self._live = Live(self._render(), refresh_per_second=4, screen=False)
+        self._live = Live(self._render(), refresh_per_second=4, screen=True)
         self._live.start()
         return self
 
