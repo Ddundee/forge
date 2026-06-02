@@ -103,6 +103,8 @@ class VerificationAgent(BaseAgent):
 
     async def _probe_web_build(self, workspace: Path) -> str:
         results = []
+        if not (workspace / "package.json").exists():
+            return "No package.json found in workspace — cannot build"
         # CI=false: don't treat warnings as errors (CRA behaviour)
         # SKIP_PREFLIGHT_CHECK=true: skip CRA version checks
         # NODE_OPTIONS=--openssl-legacy-provider: fix webpack 4 on Node 17+
@@ -113,16 +115,15 @@ class VerificationAgent(BaseAgent):
             "NODE_OPTIONS": "--openssl-legacy-provider",
         }
 
-        # Install dependencies if node_modules is missing
-        if not (workspace / "node_modules").exists():
-            install = subprocess.run(
-                ["npm", "install", "--prefer-offline", "--legacy-peer-deps"],
-                cwd=workspace, capture_output=True, text=True, timeout=180,
-            )
-            results.append(f"npm install → exit {install.returncode}")
-            if install.returncode != 0:
-                results.append(install.stderr[:600])
-                return "\n".join(results)
+        # Always install — npm install is idempotent and fast when cached
+        install = subprocess.run(
+            ["npm", "install", "--prefer-offline", "--legacy-peer-deps"],
+            cwd=workspace, capture_output=True, text=True, timeout=180,
+        )
+        results.append(f"npm install → exit {install.returncode}")
+        if install.returncode != 0:
+            results.append(install.stderr[:600])
+            return "\n".join(results)
 
         # Build
         build = subprocess.run(

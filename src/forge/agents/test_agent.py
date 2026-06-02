@@ -66,6 +66,12 @@ class TestAgent(BaseAgent):
             "SKIP_PREFLIGHT_CHECK": "true",
             "NODE_OPTIONS": "--openssl-legacy-provider",
         }
+        # For Node-based test frameworks, ensure deps are installed first
+        if framework in ("vitest", "jest", "react-scripts") and pkg.exists():
+            subprocess.run(
+                ["npm", "install", "--prefer-offline", "--legacy-peer-deps"],
+                cwd=workspace, capture_output=True, timeout=180,
+            )
         proc = subprocess.run(cmd, capture_output=True, text=True, cwd=workspace, env=env)
         output = proc.stdout + proc.stderr
         success = proc.returncode == 0
