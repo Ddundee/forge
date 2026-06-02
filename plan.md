@@ -917,7 +917,183 @@ The simpler design is correct for Forge's use case. Forge agents run unattended 
 
 ---
 
-## 12. Open Questions / Future Work
+## 12. Todo List
+
+### Phase 1 — Tool infrastructure (no agent changes yet)
+
+These tasks are pure additions with zero risk to existing behavior. All existing tests should still pass after each one.
+
+- [x] **1.1** Create `src/forge/tools/` directory with empty `__init__.py`
+- [x] **1.2** Write `src/forge/tools/definitions.py`
+  - [x] Define `bash_exec` tool schema (parameters: `command: str`, `timeout: int = 60`)
+  - [x] Define `read_file` tool schema (parameters: `path: str`)
+  - [x] Define `write_file` tool schema (parameters: `path: str`, `content: str`)
+  - [x] Define `list_dir` tool schema (parameters: `path: str = "."`)
+  - [x] Export as `TOOL_DEFINITIONS: list[dict]`
+- [x] **1.3** Write `src/forge/tools/executor.py`
+  - [x] Implement `_is_blocked(command: str) -> bool` with the hard-block pattern list
+  - [x] Implement `_bash_exec(args, workspace)` — subprocess.run, capture stdout+stderr, enforce timeout, cap output at 8000 chars
+  - [x] Implement `_read_file(args, workspace)` — resolve path, sandbox check (reject `../..` escapes), read with error replace, cap at 16000 chars
+  - [x] Implement `_write_file(args, workspace)` — resolve path, sandbox check, mkdir parents, write text
+  - [x] Implement `_list_dir(args, workspace)` — resolve path, sandbox check, sorted iterdir with `[f]`/`[d]` prefix
+  - [x] Implement top-level `execute_tool(name, args, workspace) -> str` dispatcher
+  - [x] Write unit tests for each executor function in `tests/tools/test_executor.py`
+    - [x] Test `bash_exec` with a simple echo command returns stdout
+    - [x] Test `bash_exec` with a blocked pattern returns `ERROR: Command blocked`
+    - [x] Test `bash_exec` with a timeout returns `ERROR: Command timed out`
+    - [x] Test `read_file` on an existing file returns its content
+    - [x] Test `read_file` on a missing file returns `ERROR: File not found`
+    - [x] Test `read_file` with a path escape (`../../etc/passwd`) returns `ERROR: Path escapes workspace`
+    - [x] Test `write_file` creates the file with correct content
+    - [x] Test `write_file` creates missing parent directories
+    - [x] Test `write_file` with a path escape returns `ERROR: Path escapes workspace`
+    - [x] Test `list_dir` on a directory returns `[f]`/`[d]` prefixed names
+    - [x] Test `execute_tool` with an unknown tool name returns `ERROR: Unknown tool`
+
+### Phase 2 — Router and DB extensions
+
+Extend existing modules without changing any existing method signatures. All current call sites continue to work unchanged.
+
+- [x] **2.1** Extend `src/forge/router.py`
+  - [x] Add `@dataclass ToolCall` with fields `id: str`, `name: str`, `arguments: dict`
+  - [x] Add `@dataclass LoopResult` with fields `text: str | None`, `tool_calls: list[ToolCall]`, `model: str`, `tokens_in: int`, `tokens_out: int`, `cost_usd: float`
+  - [x] Implement `LLMRouter.complete_with_tools(tier, messages, tools, **kwargs) -> LoopResult`
+    - [x] Call `litellm.acompletion` with the `tools` parameter
+    - [x] Parse `response.choices[0].message.tool_calls` into `list[ToolCall]` (parse `.function.arguments` JSON, default to `{}` on parse error)
+    - [x] Return `LoopResult` with both `text` and `tool_calls` populated
+  - [x] Write unit tests in `tests/test_router.py`
+    - [x] Mock litellm response with no tool calls → `LoopResult.tool_calls == []`, `text` populated
+    - [x] Mock litellm response with one tool call → `LoopResult.tool_calls` has one entry with correct name/args
+    - [x] Mock litellm response with malformed tool call arguments JSON → `arguments == {}`
+
+- [x] **2.2** Extend `src/forge/db.py`
+  - [x] Add `tool_calls` table definition to the `SCHEMA` string
+    - Columns: `id`, `session_id`, `task_id` (nullable), `tool_name`, `tool_args`, `tool_result`, `created_at`
+  - [x] Add foreign key reference: `session_id REFERENCES sessions(id)`, `task_id REFERENCES tasks(id)`
+  - [x] Implement `Database.log_tool_call(session_id, task_id, tool_name, tool_args, tool_result) -> None`
+  - [x] Confirm schema migration is safe: `CREATE TABLE IF NOT EXISTS` means existing DBs are unaffected
+  - [x] Write unit tests in `tests/test_db.py`
+    - [x] `log_tool_call` inserts a row and it can be queried back
+    - [x] `log_tool_call` with `task_id=None` succeeds (nullable FK)
+
+### Phase 3 — BaseAgent agentic loop
+
+The central new capability. This phase adds `_run_agentic_loop()` to `BaseAgent` without changing the existing `_call()` method. Existing agents that still use `_call()` are completely unaffected.
+
+- [x] **3.1** Update `src/forge/agents/base.py`
+  - [x] Add imports: `from forge.tools.definitions import TOOL_DEFINITIONS`, `from forge.tools.executor import execute_tool`
+  - [x] Add module-level constants: `MAX_TURNS = 40`, `MAX_TOOL_CALLS = 80`
+  - [x] Implement `BaseAgent._run_agentic_loop(messages, workspace, task_id=None, tools=None) -> str`
+    - [x] Outer `for turn in range(MAX_TURNS)` loop
+    - [x] Call `self.router.complete_with_tools(self.tier, messages, tool_defs)` each turn
+    - [x] Log every LLM turn via `self.db.log_llm_call(...)` (log `f"[{n} tool call(s)]"` as response when tool calls present)
+    - [x] If `result.tool_calls` is empty, return `result.text`
+    - [x] Append the assistant message dict (with `"tool_calls"` key) to `messages`
+    - [x] For each `ToolCall`:
+      - [x] Increment `total_tool_calls` counter; if over `MAX_TOOL_CALLS`, substitute error string
+      - [x] Call `execute_tool(tc.name, tc.arguments, workspace)`
+      - [x] Call `self.db.log_tool_call(...)` with result snippet capped at 2000 chars
+      - [x] Append `{"role": "tool", "tool_call_id": tc.id, "content": tool_result}` to `messages`
+    - [x] After exhausting `MAX_TURNS`, append a user message requesting a summary and make one final call with empty tools list
+    - [x] Return the final text
+  - [x] Write unit tests in `tests/agents/test_base_loop.py`
+    - [x] Single turn with no tool calls → loop exits after one LLM call, returns text
+    - [x] Single turn with one tool call followed by a turn with no tool calls → loop runs twice, tool result appended to messages
+    - [x] `MAX_TOOL_CALLS` exceeded → subsequent tool results are the error string
+    - [x] `MAX_TURNS` exceeded → final summary call made with empty tools list
+    - [x] Tool results are logged to DB via `log_tool_call`
+    - [x] LLM calls are logged to DB via `log_llm_call`
+
+### Phase 4 — Agent rewrites
+
+Each agent is rewritten one at a time. After each rewrite, run the full pytest suite and then run a manual forge build on a simple spec to confirm end-to-end behavior. Roll back if the suite regresses.
+
+- [x] **4.1** Rewrite `src/forge/agents/coding.py`
+  - [x] Replace the `SYSTEM` prompt: remove "Output ONLY a valid JSON array", add tool descriptions, add workflow steps, add "stop calling tools and write a summary when done"
+  - [x] Replace `run()` body: build `messages`, call `self._run_agentic_loop(messages, workspace, task_id=task_id)`
+  - [x] Remove the `_extract_json` / `json.loads` / `file_path.write_text` loop (the agent now writes via `write_file` tool)
+  - [x] Add post-loop artifact snapshot: walk `workspace.rglob("*")`, call `self.db.save_artifact()` for each file
+  - [x] Return `AgentResult(success=True, output=summary)`
+  - [x] Run `pytest` — confirm all existing tests pass
+  - [x] Manual test: run `forge build "a hello world Python script"` end-to-end
+
+- [x] **4.2** Rewrite `src/forge/agents/integration.py`
+  - [x] Replace `SYSTEM` prompt: remove JSON output requirement, add tool workflow, emphasize "run a build to verify after changes"
+  - [x] Replace `run()` body: build `messages`, call `self._run_agentic_loop(messages, workspace)`
+  - [x] Remove `_read_workspace()` call from `run()` (agent will call `list_dir`/`read_file` itself); keep `_read_workspace()` defined since `test_agent.py` imports it
+  - [x] Return `AgentResult(success=True, output=summary)`
+  - [x] Run `pytest` — confirm all existing tests pass
+  - [x] Manual test: confirm integration phase produces coherent output in a build
+
+- [x] **4.3** Rewrite `src/forge/agents/test_agent.py`
+  - [x] Replace `SYSTEM` prompt: remove JSON output requirement, add "read source files first", add "run tests and fix failures", add "stop when tests pass"
+  - [x] Replace `run()` body: build `messages` with framework name, call `self._run_agentic_loop(messages, workspace)`
+  - [x] Remove the `FRAMEWORK_CMD` dict and the manual `subprocess.run` (agent now calls `bash_exec`)
+  - [x] Remove the CRA override logic (agent detects this by reading `package.json` itself)
+  - [x] Remove `npm install` pre-step (agent runs this via `bash_exec` if needed)
+  - [x] Determine `success` from summary text: check for "pass", "✓", "success" keywords
+  - [x] Return `AgentResult(success=..., output=summary)`
+  - [x] Run `pytest` — confirm all existing tests pass
+  - [x] Manual test: confirm testing phase runs and reports results in a build
+
+- [x] **4.4** Rewrite `src/forge/agents/verification.py`
+  - [x] Replace `SYSTEM` prompt: remove hardcoded build steps, add "drive verification yourself with tools", keep the final JSON report format requirement
+  - [x] Replace `run()` body: build `messages`, call `self._run_agentic_loop(messages, workspace)`
+  - [x] Remove `_probe_web_build()`, `_probe_api()`, `_probe_cli()`, `_repair_vite_structure()` methods (all subsumed by agentic loop)
+  - [x] Keep `_extract_json` / `json.loads` to parse the LLM's final JSON report
+  - [x] Keep the `success` determination: `len(failed) == 0 and len(errors) == 0`
+  - [x] Run `pytest` — confirm all existing tests pass
+  - [x] Manual test: run a full forge build on a React app and confirm verification reaches DONE
+
+### Phase 5 — Integration testing and cleanup
+
+End-to-end validation that the full pipeline works correctly with all four agents running as agentic loops.
+
+- [ ] **5.1** Full end-to-end test: run `forge build "a React sticky notes app"` in a fresh workspace
+  - [ ] Confirm all phases complete: IDEATION → ARCHITECTURE → TASK_GRAPH → CODING → INTEGRATION → TESTING → VERIFICATION → DONE
+  - [ ] Confirm `tool_calls` DB table is populated with bash/read/write entries
+  - [ ] Confirm workspace contains a buildable project (`npm run build` exits 0)
+  - [ ] Confirm total cost and turn count are within expected range (no runaway loops)
+
+- [ ] **5.2** Full end-to-end test: run `forge build "a FastAPI todo list API"` in a fresh workspace
+  - [ ] Confirm `bash_exec` is used to run `uvicorn` or similar during verification
+  - [ ] Confirm verification agent probes an API endpoint and reports results
+
+- [ ] **5.3** Full end-to-end test: run `forge build "a Python CLI tool"` in a fresh workspace
+  - [ ] Confirm `bash_exec` is used for `python -m pytest`
+  - [ ] Confirm `read_file` is used to inspect source before writing tests
+
+- [x] **5.4** Regression: run full `pytest` suite
+  - [x] All 50 existing tests pass
+  - [x] New tests from Phases 1–3 pass
+
+- [x] **5.5** Safety audit
+  - [x] Manually attempt `bash_exec` with `rm -rf /` in a test — confirm it is blocked
+  - [x] Manually attempt `read_file` with path `../../etc/passwd` — confirm sandbox rejects it
+  - [x] Manually attempt `write_file` with path `../../.ssh/authorized_keys` — confirm sandbox rejects it
+
+- [x] **5.6** Cleanup
+  - [x] Remove dead code: `_probe_web_build`, `_probe_api`, `_probe_cli`, `_repair_vite_structure` from the old `verification.py` if not already gone
+  - [x] Remove `FRAMEWORK_CMD`, `_FRONTEND_FRAMEWORKS`, `START_COMMANDS` dicts from old agents if not already gone
+  - [x] Remove the `httpx` import from `verification.py` if no longer used (check `pyproject.toml` too)
+  - [x] Update `pyproject.toml`: remove `httpx` from dependencies if it has no other uses
+  - [x] Confirm `questionary` and other existing deps are unaffected
+
+- [ ] **5.7** Documentation
+  - [ ] Update `README.md` agent architecture section to describe the agentic loop
+  - [ ] Add a line to `Formula/forge.rb` test if the Homebrew formula needs updating (unlikely)
+
+### Phase 6 — Optional stretch goals (defer until Phases 1–5 are done)
+
+- [ ] **6.1** Streaming output: switch from `acompletion()` to streaming so the live feed shows tokens as they arrive during tool-calling turns
+- [ ] **6.2** Web fetch tool: add `fetch_url(url) -> str` tool with a domain allowlist; add to `TOOL_DEFINITIONS`
+- [ ] **6.3** Interactive permission gate: for commands matching patterns like `npm install <new-package>`, emit a confirmation prompt to the live feed and await y/n before executing
+- [ ] **6.4** Context window compaction: if the messages list exceeds ~80k tokens, summarize old tool results into a single compressed message before the next LLM call
+- [ ] **6.5** DeployAgent: convert to agentic loop with a separate `deploy_tool` set (git, fly, railway CLI) behind an explicit per-command permission gate
+
+---
+
+## 13. Open Questions / Future Work
 
 - **Streaming output**: currently each LLM turn is a blocking `acompletion()`. Could switch to `acompletion(..., stream=True)` and pipe tokens to the live feed UI so the user sees the agent "thinking" in real time.
 - **Web fetch tool**: The user said to skip for now. When added, it should be a separate tool `fetch_url(url)` with a domain allowlist.
