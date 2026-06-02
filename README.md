@@ -1,12 +1,29 @@
-# Forge
+<h1 align="center">Forge</h1>
+<p align="center"><strong>Idea to product in one command.</strong></p>
 
-**Idea to product in one command.**
+<p align="center">
+  <a href="https://github.com/Ddundee/forge/releases/latest">
+    <img alt="Version" src="https://img.shields.io/github/v/release/Ddundee/forge?label=version&color=blue" />
+  </a>
+  <a href="https://github.com/Ddundee/forge/actions/workflows/test.yml">
+    <img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/Ddundee/forge/test.yml?label=tests" />
+  </a>
+  <a href="LICENSE">
+    <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green" />
+  </a>
+  <img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-blue" />
+  <a href="https://brew.sh">
+    <img alt="Homebrew" src="https://img.shields.io/badge/install-Homebrew-orange" />
+  </a>
+</p>
 
+<br />
+
+```bash
+forge build "a React sticky notes app with drag, color picker, and localStorage"
 ```
-forge "build a REST API for a todo app with auth"
-```
 
-Forge takes a plain-text idea and autonomously builds a working product end-to-end — spec, architecture, code, tests, verification — iterating until the app actually runs. No more prompting an LLM a dozen times to connect things up.
+Forge takes a plain-text idea and autonomously builds a working product end-to-end — spec, architecture, code, tests, and verification — iterating until the app actually runs.
 
 ---
 
@@ -16,41 +33,42 @@ Forge runs a pipeline of specialized LLM agents orchestrated by an Overseer:
 
 ```
 Your idea
-  └─ IdeationAgent     asks 1-3 clarifying questions, locks a spec
+  └─ IdeationAgent     asks 1-3 clarifying questions, produces a spec
   └─ ArchitectureAgent picks stack, file structure, test framework
-  └─ TaskGraphAgent    breaks the project into a dependency-ordered task graph
-  └─ CodingAgent       writes each task's code (runs in parallel where deps allow)
-  └─ ReviewAgent       reviews each diff
+  └─ TaskGraphAgent    breaks the spec into a dependency-ordered task graph
+  └─ CodingAgent ─┐   implements each task (parallel where deps allow)
+  └─ ReviewAgent  ┘   reviews each diff inline
   └─ IntegrationAgent  wires everything together, fixes import mismatches
-  └─ TestAgent         writes and runs the test suite
-  └─ VerificationAgent builds and probes the app (runs build, test suite, fixes issues)
+  └─ TestAgent         writes tests, runs them, fixes failures
+  └─ VerificationAgent builds the app, runs the suite, applies quick fixes
        └─ passes? → Done
-       └─ fails?  → Overseer creates fix tasks and loops back (up to 5 cycles)
+       └─ fails?  → Overseer creates fix tasks, loops back (up to 5 cycles)
 ```
 
 ### Agentic tool loop
 
-The four execution agents (Coding, Integration, Test, Verification) run as **true agentic loops** — not one-shot LLM calls. Each agent has access to four tools:
+The four execution agents — Coding, Integration, Test, and Verification — run as **true agentic loops**. Each has access to four tools and drives itself until the task is done:
 
 | Tool | What it does |
 |---|---|
 | `bash_exec` | Run any shell command in the workspace (build, test, lint, install) |
 | `read_file` | Read any file relative to the workspace root |
-| `write_file` | Write or overwrite a file (creates parent dirs automatically) |
-| `list_dir` | List files and directories in the workspace |
+| `write_file` | Write or overwrite a file, creating parent directories automatically |
+| `list_dir` | List files and directories at any path in the workspace |
 
-The loop runs until the LLM stops calling tools and writes its final response. Safety guards:
+Safety guards built in:
 - Dangerous commands (`rm -rf /`, fork bombs, device writes) are hard-blocked
-- All file operations are sandboxed to the workspace directory
-- A max of 40 LLM turns and 80 total tool calls per agent prevents runaway loops
+- All file operations are sandboxed to the workspace — no path escapes
+- Max 40 LLM turns and 80 tool calls per agent prevents runaway loops
+- Every tool call is logged to the session database for full auditability
 
-Every run creates a **session** — persisted to `~/.forge/sessions/<id>/`. Sessions are resumable if interrupted.
+Every run is persisted as a **session** in `~/.forge/sessions/<id>/`. Sessions are resumable after interruption.
 
 ---
 
 ## Installation
 
-### Homebrew (recommended)
+### Homebrew (macOS — recommended)
 
 ```bash
 brew tap Ddundee/forge https://github.com/Ddundee/forge
@@ -59,13 +77,12 @@ brew install forge
 
 ### From source
 
-**Requirements:** Python 3.11+, [uv](https://github.com/astral-sh/uv)
+Requires **Python 3.11+** and [uv](https://github.com/astral-sh/uv).
 
 ```bash
 git clone https://github.com/Ddundee/forge.git
 cd forge
-uv venv .venv
-source .venv/bin/activate     # Windows: .venv\Scripts\activate
+uv venv .venv && source .venv/bin/activate
 uv pip install -e .
 ```
 
@@ -73,130 +90,137 @@ uv pip install -e .
 
 ## Setup
 
-Run the setup wizard to configure your LLM provider(s):
-
 ```bash
 forge setup
 ```
 
-This asks what you care about (speed / cost / quality) and which API keys you have, then writes a provider profile to `~/.forge/config.toml`.
+The interactive wizard:
 
-**Supported providers:** Claude (Anthropic), GPT-4 (OpenAI), Gemini (Google), Grok, Mistral, and 100+ others via [litellm](https://github.com/BerriAI/litellm).
+1. **Priority** — quality, speed, or cost (sets smart model defaults)
+2. **Providers** — pick which APIs you have keys for (Anthropic, OpenAI, Google, Groq, Mistral)
+3. **API keys** — entered securely per provider, saved to `~/.forge/keys.env` (mode 600)
+4. **Model selection** — fetches the live model list from each provider's API, then lets you pick a model for each of the four tiers with arrow keys
+
+Keys are loaded automatically before every build — no need to export environment variables manually.
+
+**Supported providers:** Anthropic (Claude), OpenAI, Google (Gemini), Groq, Mistral, and 100+ others via [litellm](https://github.com/BerriAI/litellm).
 
 ### Manual config
 
 `~/.forge/config.toml`:
 ```toml
-profile = "claude-primary"   # claude-primary | openai-primary | mixed-cost-optimized
+profile = "claude-primary"   # baseline profile (used if no models are set)
 max_cycles = 5               # max verification→fix iterations before giving up
 
 [models]
-# Override specific tiers (optional)
-# overseer = "claude-opus-4-8"
-# reasoning = "claude-sonnet-4-6"
-# standard = "claude-haiku-4-5-20251001"
-# fast = "gemini/gemini-2.0-flash"
+# Set by forge setup — override any tier here
+overseer  = "claude-opus-4-8"
+reasoning = "claude-sonnet-4-6"
+standard  = "claude-haiku-4-5-20251001"
+fast      = "gemini/gemini-2.0-flash"
 ```
 
-**Provider profiles:**
+**Built-in profiles** (used as fallback if `[models]` is empty):
 
 | Profile | Overseer | Reasoning | Standard | Fast |
-|---------|----------|-----------|----------|------|
+|---|---|---|---|---|
 | `claude-primary` | claude-opus-4-8 | claude-sonnet-4-6 | claude-haiku | claude-haiku |
 | `openai-primary` | gpt-4o | o3-mini | gpt-4o-mini | gpt-4o-mini |
 | `mixed-cost-optimized` | claude-sonnet-4-6 | claude-sonnet-4-6 | gemini-flash | gemini-flash |
 
-Set your API keys as environment variables before running:
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-export OPENAI_API_KEY=sk-...
-export GOOGLE_API_KEY=...
-```
+**Model tiers:**
+
+| Tier | Used for | Pick |
+|---|---|---|
+| `overseer` | Architecture, planning | Most capable model |
+| `reasoning` | Coding, integration | Smart + fast |
+| `standard` | Review, task graph | Balanced |
+| `fast` | Quick single-turn calls | Cheapest |
 
 ---
 
 ## Usage
 
-### Start a build
+### Build something
 
 ```bash
-forge "build a CLI tool that converts markdown to PDF"
-forge "build a REST API for a bookmarks manager with JWT auth"
-forge "build a React dashboard that shows GitHub repo stats"
+forge build "a CLI tool that converts markdown to PDF"
+forge build "a REST API for a bookmarks manager with JWT auth"
+forge build "a React dashboard that shows GitHub repo stats"
 ```
 
-**Options:**
 ```
---deploy   vercel | railway | fly.io   Deploy after build completes
---max-cycles INT                       Max fix iterations (default: 5)
+Options:
+  --deploy   TEXT     Deploy after build: vercel | railway | fly.io
+  --max-cycles INT    Max fix iterations (default: 5)
 ```
 
 ```bash
-forge "build a FastAPI backend" --deploy railway
-forge "build a Next.js app" --deploy vercel --max-cycles 3
+forge build "a FastAPI backend" --deploy railway
+forge build "a Next.js app" --deploy vercel --max-cycles 3
 ```
 
 ### Live feed
 
-While Forge runs, you get a live dashboard:
+While Forge runs you get a live terminal dashboard:
 
 ```
  forge  ●  bookmarks-api  ●  CODING  ●  cycle 1/5
 
- ┌─ Overseer ──────────────────────────────────────────────────────────┐
- │  Dispatching 4 coding tasks (2 parallel). Next: integration.        │
- └─────────────────────────────────────────────────────────────────────┘
+╭─ Overseer ──────────────────────────────────────────────────────────╮
+│  Dispatching 4 coding tasks (2 parallel). Next: integration.        │
+╰─────────────────────────────────────────────────────────────────────╯
 
- Tasks                                   Agent         Status
- ────────────────────────────────────────────────────────────────────
- [✓] Setup project structure             CodingAgent   done
- [✓] Database models                     CodingAgent   done
- [~] Auth endpoints (JWT)                CodingAgent   writing...
- [~] Bookmark CRUD API                   CodingAgent   writing...
- [ ] Wire auth into routes               —             waiting
+ Tasks                                   Status
+ ─────────────────────────────────────────────────
+ [✓] Setup project structure             done
+ [✓] Database models                     done
+ [~] Auth endpoints (JWT)                writing...
+ [~] Bookmark CRUD API                   writing...
+ [ ] Wire auth into routes               waiting
 
- [i] interrupt   [r] resume (after interrupt)   [q] quit & save
+ [i] interrupt   [r] resume   [s] session info   [q] quit & save
 ```
 
-Press **`i`** to pause and redirect Forge mid-build. Press **`q`** to save and exit.
+Press **`i`** to pause and redirect Forge mid-build.
 
 ### Resume a session
 
 ```bash
-forge resume              # resume the most recent session
-forge resume abc123       # resume a specific session by ID
+forge resume              # most recent session
+forge resume abc123       # specific session by ID
 ```
 
-### List all sessions
+### List sessions
 
 ```bash
 forge sessions
 ```
 
 ```
-                     Forge Sessions
- ID       Idea                   Phase     Cycle  Cost ($)  Created
- abc123   bookmarks manager...   DONE      1      0.2341    2026-06-01T14:32
- def456   markdown to PDF...     CODING    0      0.0892    2026-06-01T13:15
+          Forge Sessions
+ ID       Idea                   Phase   Cycle  Cost ($)  Created
+ abc123   bookmarks manager...   DONE    1      0.2341    2026-06-01 14:32
+ def456   markdown to PDF...     CODING  0      0.0892    2026-06-01 13:15
 ```
 
 ### View logs
 
 ```bash
-forge logs              # logs for most recent session
-forge logs abc123       # logs for a specific session
+forge logs              # most recent session
+forge logs abc123       # specific session
 ```
 
 ---
 
 ## What gets built
 
-Generated projects land in `~/.forge/sessions/<id>/workspace/`. Open that directory in your editor while Forge is running — it's just files.
+Workspaces land in `~/.forge/sessions/<id>/workspace/`. Open that directory in your editor while Forge is running — it's just files.
 
 Forge can build:
-- **Web apps** — React, Next.js, Vue frontends
-- **APIs** — FastAPI, Flask, Express, Go backends
-- **CLI tools** — Python, Go, Node scripts
+- **Web apps** — React + Vite, Next.js, Vue
+- **APIs** — FastAPI, Flask, Express, Go
+- **CLI tools** — Python, Go, Node
 - **Anything** — the ArchitectureAgent picks the right stack for the idea
 
 ---
@@ -204,46 +228,77 @@ Forge can build:
 ## Development
 
 ```bash
-# Run tests
-pytest -v
-
-# Run a specific test
-pytest tests/test_overseer.py -v
-
-# Install dev dependencies
+git clone https://github.com/Ddundee/forge.git
+cd forge
 uv pip install -e ".[dev]"
+
+pytest -v          # run all 109 tests
+pytest tests/test_overseer.py -v  # specific file
 ```
 
-**Project structure:**
+**Project layout:**
+
 ```
 src/forge/
-  cli.py           Typer CLI commands
-  overseer.py      Main orchestration loop
-  session.py       Session create/load/resume
-  db.py            SQLite state persistence
-  state_machine.py Phase transitions
-  router.py        LLM routing via litellm
-  config.py        Config + setup wizard
-  agents/
-    ideation.py    Idea → spec
-    architecture.py  Spec → stack + structure
-    task_graph.py  Spec → task DAG
-    coding.py      Task → code files
-    review.py      Code diff → review
-    integration.py Workspace → wired project
-    test_agent.py  Project → tests + run
-    verification.py  Running app → pass/fail report
-    deploy.py      Project → deployed URL
-  ui/
-    live_feed.py   Rich terminal dashboard
-    interrupt.py   Keyboard interrupt handler
+├── cli.py              Typer CLI (build, setup, sessions, resume, logs)
+├── overseer.py         Main orchestration loop + phase transitions
+├── session.py          Session create / load / resume
+├── db.py               SQLite: sessions, tasks, artifacts, llm_calls, tool_calls
+├── state_machine.py    Valid phase transitions
+├── router.py           LLM routing via litellm (one-shot + agentic tool calls)
+├── config.py           Config loading, setup wizard
+├── model_fetch.py      Live model list fetching from provider APIs
+├── agents/
+│   ├── base.py         BaseAgent + _run_agentic_loop()
+│   ├── ideation.py     Idea → spec (one-shot)
+│   ├── architecture.py Spec → stack + structure (one-shot)
+│   ├── task_graph.py   Spec → task DAG (one-shot)
+│   ├── coding.py       Task → code (agentic loop)
+│   ├── review.py       Code diff → review (one-shot)
+│   ├── integration.py  Workspace → wired project (agentic loop)
+│   ├── test_agent.py   Project → tests + run (agentic loop)
+│   ├── verification.py App → pass/fail report (agentic loop)
+│   └── deploy.py       Project → deployed URL
+├── tools/
+│   ├── definitions.py  Tool JSON schemas (bash_exec, read_file, write_file, list_dir)
+│   └── executor.py     Tool execution + workspace sandboxing + safety blocks
+└── ui/
+    ├── live_feed.py    Rich terminal dashboard
+    └── interrupt.py    Keyboard interrupt handler
 ```
 
 ---
 
-## Architecture decisions
+## Releasing
+
+Releases are fully automated. To ship a new version:
+
+```bash
+# 1. Bump version in pyproject.toml
+# 2. Commit and push to main
+git tag v0.1.3
+git push origin v0.1.3
+```
+
+The [release workflow](.github/workflows/release.yml) then:
+- Computes the tarball sha256
+- Updates `Formula/forge.rb` and commits it back to main
+- Creates a GitHub Release with a changelog from git log
+
+The version badge above updates automatically when the release is published.
+
+---
+
+## Architecture notes
 
 - **SQLite state machine** — every phase transition is persisted. A crash mid-build resumes exactly where it left off.
-- **litellm** — one interface for every LLM provider. Switch models per tier in config without changing code.
-- **Verification loop** — Forge doesn't stop at "code written". It runs the app and probes it. Failures feed back as fix tasks.
+- **litellm** — one interface for every LLM provider. Switch any model tier in config without changing code.
+- **Agentic loops** — execution agents run multi-turn conversations with real tool access, not just one-shot JSON generation. They can read their own output, see failures, and fix them.
+- **Verification loop** — Forge doesn't stop at "code written". It builds the app, runs the test suite, and iterates on failures up to `max_cycles` times.
 - **No vendor lock-in** — the workspace is plain files. If Forge gets stuck, open the workspace and keep going yourself.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
