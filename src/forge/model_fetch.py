@@ -36,13 +36,16 @@ _PROVIDER_LABEL_TO_LITELLM: dict[str, str] = {
     "Mistral": "mistral",
 }
 
-_OPENAI_CHAT_PREFIXES: tuple[str, ...] = (
-    "gpt-4",
-    "gpt-3.5-turbo",
+# Used only for the litellm fallback, which is noisy.
+# Live API fetch uses _should_skip alone (the API is already curated).
+_OPENAI_LITELLM_PREFIXES: tuple[str, ...] = (
+    "gpt-",
     "o1",
+    "o2",
     "o3",
     "o4",
-    "chatgpt-4o",
+    "o5",
+    "chatgpt-",
 )
 
 
@@ -75,11 +78,11 @@ def _fetch_openai(api_key: str) -> list[str]:
         "https://api.openai.com/v1/models",
         {"Authorization": f"Bearer {api_key}"},
     )
-    models = []
-    for item in data.get("data", []):
-        mid = item.get("id", "")
-        if not _should_skip(mid) and any(mid.startswith(p) for p in _OPENAI_CHAT_PREFIXES):
-            models.append(mid)
+    models = [
+        item["id"]
+        for item in data.get("data", [])
+        if not _should_skip(item.get("id", ""))
+    ]
     return sorted(set(models), reverse=True)
 
 
@@ -146,7 +149,7 @@ def _litellm_fallback(provider_label: str) -> list[str]:
             continue
         if prefix and not mid.startswith(prefix):
             mid = prefix + mid
-        if key == "openai" and not any(mid.startswith(p) for p in _OPENAI_CHAT_PREFIXES):
+        if key == "openai" and not any(mid.startswith(p) for p in _OPENAI_LITELLM_PREFIXES):
             continue
         if key == "anthropic" and not mid.startswith("claude"):
             continue
