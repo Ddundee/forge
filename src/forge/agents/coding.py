@@ -1,45 +1,70 @@
-import json
 from pathlib import Path
-from forge.agents.base import BaseAgent, AgentResult, _extract_json
+from forge.agents.base import BaseAgent, AgentResult
 from forge.router import ModelTier
 
 SYSTEM = """You are a senior software engineer implementing one focused coding task.
 
-Write the files needed for this task. Output ONLY a valid JSON array of file writes:
-[
-  {"path": "relative/path/from/workspace/root.py", "content": "full file content"},
-  ...
-]
+You have tools available:
+- bash_exec: run shell commands (build, lint, syntax check, install packages)
+- read_file: read any file in the workspace
+- write_file: write or overwrite a file in the workspace
+- list_dir: list directory contents
+
+Workflow:
+1. Use list_dir and read_file to understand the existing codebase and conventions
+2. Write the files needed for this task using write_file
+3. Run a quick sanity check (e.g. python -c "import <module>" or npx tsc --noEmit) if useful
+4. When the task is complete, output a brief summary of what you wrote
 
 Rules:
-- Write complete, working code — no placeholders, no TODOs
-- Each file must be self-contained and importable
+- Write complete, working code — no placeholders or TODOs
+- Match the existing code style you observe in the workspace
 - Follow the architecture and stack decisions exactly
-- Include all necessary imports"""
+- When you are done with all file writes, stop calling tools and write your summary"""
 
 
 class CodingAgent(BaseAgent):
     tier = ModelTier.REASONING
 
-    async def run(self, task_title: str, spec: str, architecture: str,  # type: ignore[override]
-                  workspace: Path, context: str = "", task_id: str | None = None) -> AgentResult:
-        messages = [
+    async def run(
+        self,
+        task_title: str,
+        spec: str,
+        architecture: str,
+        workspace: Path,
+        context: str = "",
+        task_id: str | None = None,
+    ) -> AgentResult:
+        messages: list[dict] = [
             {"role": "system", "content": SYSTEM},
             {"role": "user", "content": (
-                f"Task: {task_title}\n\nSpec:\n{spec}\n\nArchitecture:\n{architecture}"
+                f"Task: {task_title}\n\n"
+                f"Spec:\n{spec}\n\n"
+                f"Architecture:\n{architecture}"
                 + (f"\n\nContext from prior tasks:\n{context}" if context else "")
+                + f"\n\nWorkspace root: {workspace}"
             )},
         ]
-        response = await self._call(messages, task_id=task_id)
-        try:
-            file_writes: list[dict] = json.loads(_extract_json(response))
-        except json.JSONDecodeError:
-            return AgentResult(success=False, output=response, error="invalid_json")
 
-        for fw in file_writes:
-            file_path = workspace / fw["path"]
-            file_path.parent.mkdir(parents=True, exist_ok=True)
-            file_path.write_text(fw["content"])
-            self.db.save_artifact(self.session_id, fw["path"], fw["content"])
+        summary = await self._run_agentic_loop(
+            messages=messages,
+            workspace=workspace,
+            task_id=task_id,
+        )
 
-        return AgentResult(success=True, output=json.dumps(file_writes))
+        written: list[str] = []
+        for f in workspace.rglob("*"):
+            if f.is_file() and not any(
+                p.startswith(".") for p in f.parts[len(workspace.parts):]
+            ):
+                rel = str(f.relative_to(workspace))
+                try:
+                    self.db.save_artifact(self.session_id, rel, f.read_text())
+                    written.append(rel)
+                except Exception:
+                    pass
+
+        return AgentResult(
+            success=True,
+            output=summary or f"Wrote {len(written)} files",
+        )

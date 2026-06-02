@@ -23,10 +23,26 @@ Your idea
   └─ ReviewAgent       reviews each diff
   └─ IntegrationAgent  wires everything together, fixes import mismatches
   └─ TestAgent         writes and runs the test suite
-  └─ VerificationAgent starts the app and probes it (HTTP, CLI, or Playwright)
+  └─ VerificationAgent builds and probes the app (runs build, test suite, fixes issues)
        └─ passes? → Done
        └─ fails?  → Overseer creates fix tasks and loops back (up to 5 cycles)
 ```
+
+### Agentic tool loop
+
+The four execution agents (Coding, Integration, Test, Verification) run as **true agentic loops** — not one-shot LLM calls. Each agent has access to four tools:
+
+| Tool | What it does |
+|---|---|
+| `bash_exec` | Run any shell command in the workspace (build, test, lint, install) |
+| `read_file` | Read any file relative to the workspace root |
+| `write_file` | Write or overwrite a file (creates parent dirs automatically) |
+| `list_dir` | List files and directories in the workspace |
+
+The loop runs until the LLM stops calling tools and writes its final response. Safety guards:
+- Dangerous commands (`rm -rf /`, fork bombs, device writes) are hard-blocked
+- All file operations are sandboxed to the workspace directory
+- A max of 40 LLM turns and 80 total tool calls per agent prevents runaway loops
 
 Every run creates a **session** — persisted to `~/.forge/sessions/<id>/`. Sessions are resumable if interrupted.
 
@@ -39,11 +55,6 @@ Every run creates a **session** — persisted to `~/.forge/sessions/<id>/`. Sess
 ```bash
 brew tap Ddundee/forge https://github.com/Ddundee/forge
 brew install forge
-```
-
-For web-app verification (Playwright):
-```bash
-playwright install chromium
 ```
 
 ### From source
