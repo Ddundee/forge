@@ -93,7 +93,7 @@ class LiveFeed:
         layout = Layout()
         layout.split_column(
             Layout(name="header", size=1),
-            Layout(name="phase_bar", size=2),
+            Layout(name="phase_bar", size=1),
             Layout(name="overseer", size=3),
             Layout(name="body"),
             Layout(name="footer", size=1),
@@ -114,9 +114,7 @@ class LiveFeed:
         )
 
         # Phase bar
-        layout["phase_bar"].update(
-            Panel(self._build_phase_bar(), border_style="dim", padding=(0, 1))
-        )
+        layout["phase_bar"].update(self._build_phase_bar())
 
         # Overseer panel
         layout["overseer"].update(
