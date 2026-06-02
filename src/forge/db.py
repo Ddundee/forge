@@ -111,6 +111,13 @@ class Database:
         )
         self.conn.commit()
 
+    def get_total_cost(self, session_id: str) -> float:
+        row = self.conn.execute(
+            "SELECT COALESCE(SUM(cost_usd), 0) FROM llm_calls WHERE session_id = ?",
+            (session_id,),
+        ).fetchone()
+        return float(row[0]) if row else 0.0
+
     def list_sessions(self) -> list[sqlite3.Row]:
         return self.conn.execute(
             "SELECT s.*, COALESCE(SUM(l.cost_usd), 0) as total_cost "
