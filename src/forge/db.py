@@ -61,6 +61,16 @@ CREATE TABLE IF NOT EXISTS events (
     phase TEXT NOT NULL,
     message TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS tool_calls (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(id),
+    task_id TEXT REFERENCES tasks(id),
+    tool_name TEXT NOT NULL,
+    tool_args TEXT NOT NULL DEFAULT '{}',
+    tool_result TEXT,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -156,6 +166,22 @@ class Database:
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (_uid(), task_id, session_id, provider, model,
              tokens_in, tokens_out, cost_usd, response, _now()),
+        )
+        self.conn.commit()
+
+    def log_tool_call(
+        self,
+        session_id: str,
+        task_id: str | None,
+        tool_name: str,
+        tool_args: str,
+        tool_result: str,
+    ) -> None:
+        self.conn.execute(
+            "INSERT INTO tool_calls "
+            "(id, session_id, task_id, tool_name, tool_args, tool_result, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (_uid(), session_id, task_id, tool_name, tool_args, tool_result, _now()),
         )
         self.conn.commit()
 

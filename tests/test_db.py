@@ -75,3 +75,19 @@ def test_save_artifact_versioned(db: Database) -> None:
         (sid,),
     ).fetchall()
     assert [r["version"] for r in rows] == [1, 2]
+
+
+def test_log_tool_call_inserts_row(db: Database) -> None:
+    sid = db.create_session("idea")
+    db.log_tool_call(sid, None, "bash_exec", '{"command": "ls"}', "file.py\n[exit 0]")
+    rows = db.conn.execute("SELECT * FROM tool_calls WHERE session_id = ?", (sid,)).fetchall()
+    assert len(rows) == 1
+    assert rows[0]["tool_name"] == "bash_exec"
+    assert rows[0]["tool_result"] == "file.py\n[exit 0]"
+
+
+def test_log_tool_call_nullable_task_id(db: Database) -> None:
+    sid = db.create_session("idea")
+    db.log_tool_call(sid, None, "read_file", '{"path": "main.py"}', "content")
+    rows = db.conn.execute("SELECT * FROM tool_calls WHERE session_id = ?", (sid,)).fetchall()
+    assert rows[0]["task_id"] is None
