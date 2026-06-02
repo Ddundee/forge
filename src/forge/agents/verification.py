@@ -105,6 +105,10 @@ class VerificationAgent(BaseAgent):
         results = []
         if not (workspace / "package.json").exists():
             return "No package.json found in workspace — cannot build"
+
+        # Vite requires index.html in the project root, not in public/
+        self._repair_vite_structure(workspace)
+        results.append("Structural check done")
         # CI=false: don't treat warnings as errors (CRA behaviour)
         # SKIP_PREFLIGHT_CHECK=true: skip CRA version checks
         # NODE_OPTIONS=--openssl-legacy-provider: fix webpack 4 on Node 17+
@@ -146,6 +150,38 @@ class VerificationAgent(BaseAgent):
         results.append((test.stdout + test.stderr)[:600])
 
         return "\n".join(results)
+
+    def _repair_vite_structure(self, workspace: Path) -> None:
+        """Move index.html to root if Vite project has it misplaced in public/."""
+        pkg = workspace / "package.json"
+        try:
+            pkg_data = json.loads(pkg.read_text())
+            deps = {**pkg_data.get("dependencies", {}), **pkg_data.get("devDependencies", {})}
+        except Exception:
+            return
+        if "vite" not in deps:
+            return
+
+        # Fix: index.html belongs in root for Vite
+        root_html = workspace / "index.html"
+        public_html = workspace / "public" / "index.html"
+        if not root_html.exists() and public_html.exists():
+            import shutil
+            shutil.copy(public_html, root_html)
+
+        # Fix: ensure src/main.jsx exists (Vite convention) — copy index.js if needed
+        main_jsx = workspace / "src" / "main.jsx"
+        main_js = workspace / "src" / "main.js"
+        index_js = workspace / "src" / "index.js"
+        if not main_jsx.exists() and not main_js.exists() and index_js.exists():
+            import shutil
+            shutil.copy(index_js, main_jsx)
+            # Update the index.html script src to point to main.jsx
+            if root_html.exists():
+                html = root_html.read_text()
+                html = html.replace('src="/src/index.js"', 'src="/src/main.jsx"')
+                html = html.replace("src='/src/index.js'", "src='/src/main.jsx'")
+                root_html.write_text(html)
 
     async def _probe_api(self) -> list[str]:
         results = []

@@ -15,7 +15,13 @@ Output ONLY valid JSON:
 
 Important stack guidance:
 - For React frontend apps, prefer Vite (framework: "Vite+React") over Create React App — CRA is deprecated and breaks on modern Node.js.
-- Vite projects use: npm create vite@latest, test_framework: "vitest", scripts: {"dev": "vite", "build": "vite build", "test": "vitest run"}
+- Correct Vite+React project structure (MUST follow exactly):
+  - index.html in the PROJECT ROOT (NOT in public/) with <script type="module" src="/src/main.jsx"></script>
+  - src/main.jsx as the React entry point (NOT src/index.js)
+  - src/App.jsx for the root component
+  - vite.config.js at root with @vitejs/plugin-react plugin
+  - package.json scripts: {"dev": "vite", "build": "vite build", "preview": "vite preview", "test": "vitest run"}
+  - devDependencies: vite, @vitejs/plugin-react, vitest, @vitest/ui, jsdom, @testing-library/react, @testing-library/jest-dom
 - For purely frontend apps set verification_method to "web"."""
 
 
