@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from forge.db import Database
+from forge.prompt_log import PromptLogger
 from forge.router import CallResult, LLMRouter, ModelTier
 from forge.tools.definitions import TOOL_DEFINITIONS
 from forge.tools.executor import execute_tool
@@ -59,6 +60,7 @@ class BaseAgent(ABC):
         self.router = router
         self.db = db
         self.session_id = session_id
+        self._prompt_logger = PromptLogger(session_id)
 
     @abstractmethod
     async def run(self, **kwargs) -> AgentResult:
@@ -76,6 +78,16 @@ class BaseAgent(ABC):
             cost_usd=result.cost_usd,
             response=result.content,
             task_id=task_id,
+        )
+        self._prompt_logger.log(
+            agent=type(self).__name__,
+            tier=self.tier.value,
+            model=result.model,
+            messages=messages,
+            response=result.content,
+            tokens_in=result.tokens_in,
+            tokens_out=result.tokens_out,
+            cost_usd=result.cost_usd,
         )
         return result.content
 
@@ -102,6 +114,19 @@ class BaseAgent(ABC):
                 cost_usd=result.cost_usd,
                 response=log_response,
                 task_id=task_id,
+            )
+
+            tools_used = [tc.name for tc in result.tool_calls] if result.tool_calls else None
+            self._prompt_logger.log(
+                agent=type(self).__name__,
+                tier=self.tier.value,
+                model=result.model,
+                messages=messages,
+                response=result.text or "",
+                tokens_in=result.tokens_in,
+                tokens_out=result.tokens_out,
+                cost_usd=result.cost_usd,
+                tools_called=tools_used,
             )
 
             if not result.tool_calls:
@@ -159,5 +184,15 @@ class BaseAgent(ABC):
             cost_usd=final.cost_usd,
             response=final.text or "",
             task_id=task_id,
+        )
+        self._prompt_logger.log(
+            agent=type(self).__name__,
+            tier=self.tier.value,
+            model=final.model,
+            messages=messages,
+            response=final.text or "",
+            tokens_in=final.tokens_in,
+            tokens_out=final.tokens_out,
+            cost_usd=final.cost_usd,
         )
         return final.text or ""

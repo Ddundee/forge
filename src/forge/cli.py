@@ -218,5 +218,109 @@ def logs(session_id: Optional[str] = typer.Argument(None)) -> None:
         console.print(f"[dim]{e['timestamp'][:19]}[/dim] [{color}]{e['phase']:14}[/{color}] {e['message']}")
 
 
+@app.command()
+def prompts(
+    session_id: Optional[str] = typer.Argument(None),
+    follow: bool = typer.Option(False, "--follow", "-f", help="Stream new entries in real-time"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show full prompt and response text"),
+) -> None:
+    import time
+    from forge.session import Session, SESSIONS_DIR
+    from forge.prompt_log import log_path
+
+    if session_id:
+        sid = session_id
+    else:
+        s = Session.load_last()
+        sid = s.id
+
+    lp = log_path(sid)
+    console.print(f"[dim]Session {sid}  →  {lp}[/dim]\n")
+
+    _phase_colors = {
+        "overseer": "magenta",
+        "reasoning": "blue",
+        "standard": "cyan",
+        "fast": "green",
+    }
+    _tier_labels = {
+        "overseer": "OVERSEER",
+        "reasoning": "REASON ",
+        "standard": "STANDARD",
+        "fast": "FAST   ",
+    }
+
+    def _render_entry(raw: str) -> None:
+        import json as _json
+        try:
+            e = _json.loads(raw)
+        except Exception:
+            return
+
+        tier = e.get("tier", "")
+        color = _phase_colors.get(tier, "white")
+        tier_label = _tier_labels.get(tier, tier.upper()[:8])
+        agent = e.get("agent", "?")
+        model = e.get("model", "?").split("/")[-1]
+        ts = e.get("ts", "")[:19].replace("T", " ")
+        tin = e.get("tokens_in", 0)
+        tout = e.get("tokens_out", 0)
+        cost = e.get("cost_usd", 0.0)
+        tools = e.get("tools_called") or []
+        user_prompt = e.get("user_prompt", "")
+        response = e.get("response", "")
+
+        header = (
+            f"[bold {color}]{tier_label}[/bold {color}]  "
+            f"[bold]{agent}[/bold]  "
+            f"[dim]{model}[/dim]  "
+            f"[dim]{ts}[/dim]  "
+            f"[cyan]↑{tin} ↓{tout}[/cyan]  "
+            f"[green]${cost:.4f}[/green]"
+        )
+        console.print(header)
+
+        if tools:
+            console.print(f"  [yellow]Tools:[/yellow] {' → '.join(tools)}")
+
+        prompt_limit = None if verbose else 200
+        reply_limit = None if verbose else 200
+
+        prompt_text = user_prompt[:prompt_limit] if prompt_limit else user_prompt
+        if not verbose and len(user_prompt) > 200:
+            prompt_text += "…"
+        if prompt_text:
+            console.print(f"  [dim]Prompt:[/dim] {prompt_text}")
+
+        reply_text = response[:reply_limit] if reply_limit else response
+        if not verbose and len(response) > 200:
+            reply_text += "…"
+        if reply_text:
+            console.print(f"  [dim]Reply :[/dim] {reply_text}")
+
+        console.print("[dim]" + "─" * 80 + "[/dim]")
+
+    if not lp.exists():
+        if not follow:
+            console.print("[dim]No prompts logged yet for this session.[/dim]")
+            return
+        console.print("[dim]Waiting for first prompt…[/dim]")
+
+    pos = 0
+    while True:
+        if lp.exists():
+            with lp.open() as f:
+                f.seek(pos)
+                for line in f:
+                    line = line.rstrip("\n")
+                    if line:
+                        _render_entry(line)
+                pos = f.tell()
+
+        if not follow:
+            break
+        time.sleep(0.5)
+
+
 if __name__ == "__main__":
     app()
