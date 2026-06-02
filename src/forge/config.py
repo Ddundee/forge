@@ -135,11 +135,18 @@ def _smart_default(models: list[str], priority: str) -> str:
 def run_setup_wizard() -> ForgeConfig:
     import questionary
     from rich.console import Console
+    from rich.panel import Panel
+    from rich.text import Text
     from forge.model_fetch import fetch_models_for_provider
 
     console = Console()
-    console.print("\n[bold cyan]Forge Setup[/bold cyan]\n")
+    console.print(Panel(
+        Text("⚒  FORGE  —  idea to product in one command", justify="center", style="bold cyan"),
+        border_style="cyan",
+    ))
+    console.print()
 
+    console.print("[bold]Step 1 of 4[/bold]  —  Priority\n")
     priority_choice = questionary.select(
         "What matters most to you?",
         choices=[
@@ -152,6 +159,7 @@ def run_setup_wizard() -> ForgeConfig:
     if priority_choice is None:
         raise SystemExit(0)
 
+    console.print("[bold]Step 2 of 4[/bold]  —  Providers\n")
     selected_providers: list[str] = questionary.checkbox(
         "Which API providers do you have keys for?",
         choices=_PROVIDER_CHOICES,
@@ -161,6 +169,7 @@ def run_setup_wizard() -> ForgeConfig:
         raise SystemExit(0)
 
     console.print()
+    console.print("[bold]Step 3 of 4[/bold]  —  API Keys\n")
     keys: dict[str, str] = {}
     for provider in selected_providers:
         env_var, label = _PROVIDER_KEY_MAP[provider]
@@ -177,7 +186,9 @@ def run_setup_wizard() -> ForgeConfig:
             keys[env_var] = existing
 
     # Fetch models from each provider
-    console.print("\n[dim]Fetching available models…[/dim]")
+    console.print()
+    console.print("[bold]Step 4 of 4[/bold]  —  Models\n")
+    console.print("[dim]Fetching available models…[/dim]")
     all_models: list[str] = []
     seen: set[str] = set()
     for provider in selected_providers:
@@ -228,14 +239,20 @@ def run_setup_wizard() -> ForgeConfig:
     if keys:
         save_keys(keys)
 
-    console.print(f"\n[green]✓[/green] Profile: [bold]{profile}[/bold]")
-    if chosen:
-        for tier, description in _TIER_PROMPTS:
-            model = chosen.get(tier.value, "")
-            tier_label = description.split("—")[0].strip()
-            console.print(f"  [green]✓[/green] [dim]{tier_label:<12}[/dim] → {model}")
-    console.print(f"\n[dim]Config → {CONFIG_FILE}[/dim]")
+    summary_lines = [
+        "[green]✓ Setup complete![/green]",
+        "",
+        f"[dim]Config  →  {CONFIG_FILE}[/dim]",
+    ]
     if keys:
-        console.print(f"[dim]Keys   → {KEYS_FILE} (mode 600)[/dim]")
+        summary_lines.append(f"[dim]Keys    →  {KEYS_FILE}[/dim]")
+    summary_lines += [
+        "",
+        '[bold]Run:[/bold]  forgecli build "your idea"',
+    ]
+    console.print(Panel(
+        "\n".join(summary_lines),
+        border_style="green",
+    ))
     console.print()
     return cfg
