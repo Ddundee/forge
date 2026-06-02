@@ -1,3 +1,4 @@
+import asyncio
 import json
 from dataclasses import dataclass, field
 from enum import Enum
@@ -58,8 +59,15 @@ class LLMRouter:
     async def complete(self, tier: ModelTier, messages: list[dict],
                        **kwargs) -> CallResult:
         model = self._models[tier]
-        kwargs.setdefault("timeout", 120)
-        response = await litellm.acompletion(model=model, messages=messages, **kwargs)
+        timeout = kwargs.pop("timeout", 120)
+        kwargs["timeout"] = timeout
+        try:
+            response = await asyncio.wait_for(
+                litellm.acompletion(model=model, messages=messages, **kwargs),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            raise TimeoutError(f"LLM call timed out after {timeout}s (model: {model})")
         usage = response.usage
         try:
             cost = litellm.completion_cost(response)
@@ -81,11 +89,17 @@ class LLMRouter:
         **kwargs,
     ) -> LoopResult:
         model = self._models[tier]
-        call_kwargs: dict[str, object] = {"model": model, "messages": messages, **kwargs}
-        call_kwargs.setdefault("timeout", 120)
+        timeout = kwargs.pop("timeout", 120)
+        call_kwargs: dict[str, object] = {"model": model, "messages": messages, "timeout": timeout, **kwargs}
         if tools:
             call_kwargs["tools"] = tools
-        response = await litellm.acompletion(**call_kwargs)
+        try:
+            response = await asyncio.wait_for(
+                litellm.acompletion(**call_kwargs),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError:
+            raise TimeoutError(f"LLM call timed out after {timeout}s (model: {model})")
         usage = response.usage
         try:
             cost = litellm.completion_cost(response)

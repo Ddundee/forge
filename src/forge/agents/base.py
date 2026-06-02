@@ -68,6 +68,9 @@ class BaseAgent(ABC):
 
     async def _call(self, messages: list[dict],
                     task_id: str | None = None, **kwargs) -> str:
+        model = self.router.model_for(self.tier)
+        self.db.log_event(self.session_id, "LLM_CALL",
+                          f"{type(self).__name__} → {model}")
         result: CallResult = await self.router.complete(self.tier, messages, **kwargs)
         self.db.log_llm_call(
             session_id=self.session_id,
@@ -101,7 +104,10 @@ class BaseAgent(ABC):
         tool_defs = tools if tools is not None else TOOL_DEFINITIONS
         total_tool_calls = 0
 
-        for _ in range(MAX_TURNS):
+        for turn in range(MAX_TURNS):
+            model = self.router.model_for(self.tier)
+            self.db.log_event(self.session_id, "LLM_CALL",
+                              f"{type(self).__name__} turn {turn + 1} → {model}")
             result = await self.router.complete_with_tools(self.tier, messages, tool_defs)
 
             log_response = result.text or f"[{len(result.tool_calls)} tool call(s)]"
