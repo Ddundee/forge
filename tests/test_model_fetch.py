@@ -58,17 +58,23 @@ def test_fetch_openai_filters_non_chat() -> None:
     payload = {
         "data": [
             {"id": "gpt-4o"},
+            {"id": "gpt-5"},
+            {"id": "gpt-5.5"},
             {"id": "dall-e-3"},
             {"id": "whisper-1"},
             {"id": "o3-mini"},
+            {"id": "text-embedding-3-large"},
         ]
     }
     with _mock_http(payload):
         result = _fetch_openai("key")
     assert "gpt-4o" in result
+    assert "gpt-5" in result
+    assert "gpt-5.5" in result
     assert "o3-mini" in result
     assert "dall-e-3" not in result
     assert "whisper-1" not in result
+    assert "text-embedding-3-large" not in result
 
 
 def test_fetch_google_formats_prefix() -> None:
