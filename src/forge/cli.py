@@ -33,6 +33,9 @@ def build(
     def on_event(message: str) -> None:
         feed.set_overseer(message)
         feed.push_event(session.phase, message)
+        feed.cycle = session.cycle
+        for task in session.db.get_tasks(session.id):
+            feed.update_task(task["id"], task["title"], task["status"], None)
 
     async def ask_user(question: str) -> str | None:
         import sys
