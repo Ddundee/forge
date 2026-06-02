@@ -1,3 +1,9 @@
+# Claude Code / environment
+.claude/
+docs/superpowers/
+plan.md
+plan_model_selection.md
+
 __pycache__/
 *.pyc
 *.pyo
