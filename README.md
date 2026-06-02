@@ -71,7 +71,7 @@ Every run is persisted as a **session** in `~/.forge/sessions/<id>/`. Sessions a
 ### Homebrew (macOS — recommended)
 
 ```bash
-brew tap Ddundee/forge https://github.com/Ddundee/forge
+brew tap Ddundee/forge
 brew install forge
 ```
 
