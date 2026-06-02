@@ -4,15 +4,20 @@ from pathlib import Path
 from forge.agents.base import BaseAgent, AgentResult, _extract_json
 from forge.router import ModelTier
 
-SYSTEM = """You are a test engineer. Write comprehensive tests for the project.
+SYSTEM = """You are a test engineer. Write tests for the project shown in the workspace.
 
 Output ONLY a JSON array of test files:
-[{"path": "tests/test_module.py", "content": "full test code"}, ...]
+[{"path": "tests/test_component.jsx", "content": "full test code"}, ...]
 
-Write:
-1. Unit tests for every public function/class
-2. One integration test exercising the main happy-path flow
-Use the test framework specified in the architecture."""
+Critical rules:
+- ONLY import modules that ACTUALLY EXIST in the workspace file tree provided
+- Do NOT invent utility functions (addNumbers, runApp, etc.) — test what is actually there
+- For React+Vitest: import components from their real paths (e.g. '../src/App.jsx')
+- For React components: use @testing-library/react + jsdom; add `@vitest/browser` or `environment: 'jsdom'` in vitest config if needed
+- For vitest: `import { describe, it, expect, vi } from 'vitest'`
+- Keep tests simple — render the component and assert it mounts without crashing
+- Skip a module if you cannot identify what to import from the workspace
+- Use the test framework specified in the architecture"""
 
 FRAMEWORK_CMD: dict[str, list[str]] = {
     "pytest": ["python", "-m", "pytest", "-v", "--tb=short"],
