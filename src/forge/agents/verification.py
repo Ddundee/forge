@@ -99,7 +99,15 @@ class VerificationAgent(BaseAgent):
 
     async def _probe_web_build(self, workspace: Path) -> str:
         results = []
-        env = {**os.environ, "CI": "false"}  # CI=true makes CRA treat warnings as errors
+        # CI=false: don't treat warnings as errors (CRA behaviour)
+        # SKIP_PREFLIGHT_CHECK=true: skip CRA version checks
+        # NODE_OPTIONS=--openssl-legacy-provider: fix webpack 4 on Node 17+
+        build_env = {
+            **os.environ,
+            "CI": "false",
+            "SKIP_PREFLIGHT_CHECK": "true",
+            "NODE_OPTIONS": "--openssl-legacy-provider",
+        }
 
         # Install dependencies if node_modules is missing
         if not (workspace / "node_modules").exists():
@@ -115,7 +123,7 @@ class VerificationAgent(BaseAgent):
         # Build
         build = subprocess.run(
             ["npm", "run", "build"],
-            cwd=workspace, capture_output=True, text=True, timeout=180, env=env,
+            cwd=workspace, capture_output=True, text=True, timeout=180, env=build_env,
         )
         results.append(f"npm run build → exit {build.returncode}")
         if build.returncode != 0:
@@ -127,7 +135,7 @@ class VerificationAgent(BaseAgent):
         test = subprocess.run(
             ["npm", "test", "--", "--watchAll=false", "--passWithNoTests"],
             cwd=workspace, capture_output=True, text=True, timeout=120,
-            env={**os.environ, "CI": "true"},
+            env={**build_env, "CI": "true"},
         )
         results.append(f"npm test → exit {test.returncode}")
         results.append((test.stdout + test.stderr)[:600])

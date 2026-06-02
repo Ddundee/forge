@@ -60,7 +60,12 @@ class TestAgent(BaseAgent):
                 pass
 
         cmd = FRAMEWORK_CMD.get(framework, ["python", "-m", "pytest", "-v"])
-        env = {**__import__("os").environ, "CI": "true"}
+        env = {
+            **__import__("os").environ,
+            "CI": "true",
+            "SKIP_PREFLIGHT_CHECK": "true",
+            "NODE_OPTIONS": "--openssl-legacy-provider",
+        }
         proc = subprocess.run(cmd, capture_output=True, text=True, cwd=workspace, env=env)
         output = proc.stdout + proc.stderr
         success = proc.returncode == 0

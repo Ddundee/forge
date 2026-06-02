@@ -11,7 +11,12 @@ Output ONLY valid JSON:
   "deploy_platforms": ["vercel|railway|fly.io|none"],
   "test_framework": "pytest|vitest|go-test|jest|...",
   "verification_method": "web|api|cli"
-}"""
+}
+
+Important stack guidance:
+- For React frontend apps, prefer Vite (framework: "Vite+React") over Create React App — CRA is deprecated and breaks on modern Node.js.
+- Vite projects use: npm create vite@latest, test_framework: "vitest", scripts: {"dev": "vite", "build": "vite build", "test": "vitest run"}
+- For purely frontend apps set verification_method to "web"."""
 
 
 class ArchitectureAgent(BaseAgent):
