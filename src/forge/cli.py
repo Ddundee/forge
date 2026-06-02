@@ -5,7 +5,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-app = typer.Typer(name="forge", help="Idea to product in one command.")
+app = typer.Typer(name="forgecli", help="Idea to product in one command.")
 console = Console()
 
 

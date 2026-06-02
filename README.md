@@ -20,7 +20,7 @@
 <br />
 
 ```bash
-forge build "a React sticky notes app with drag, color picker, and localStorage"
+forgecli build "a React sticky notes app with drag, color picker, and localStorage"
 ```
 
 Forge takes a plain-text idea and autonomously builds a working product end-to-end — spec, architecture, code, tests, and verification — iterating until the app actually runs.
@@ -72,7 +72,7 @@ Every run is persisted as a **session** in `~/.forge/sessions/<id>/`. Sessions a
 
 ```bash
 brew tap Ddundee/forge
-brew install forge
+brew install forgecli
 ```
 
 ### From source
@@ -91,7 +91,7 @@ uv pip install -e .
 ## Setup
 
 ```bash
-forge setup
+forgecli setup
 ```
 
 The interactive wizard:
@@ -113,7 +113,7 @@ profile = "claude-primary"   # baseline profile (used if no models are set)
 max_cycles = 5               # max verification→fix iterations before giving up
 
 [models]
-# Set by forge setup — override any tier here
+# Set by forgecli setup — override any tier here
 overseer  = "claude-opus-4-8"
 reasoning = "claude-sonnet-4-6"
 standard  = "claude-haiku-4-5-20251001"
@@ -144,9 +144,9 @@ fast      = "gemini/gemini-2.0-flash"
 ### Build something
 
 ```bash
-forge build "a CLI tool that converts markdown to PDF"
-forge build "a REST API for a bookmarks manager with JWT auth"
-forge build "a React dashboard that shows GitHub repo stats"
+forgecli build "a CLI tool that converts markdown to PDF"
+forgecli build "a REST API for a bookmarks manager with JWT auth"
+forgecli build "a React dashboard that shows GitHub repo stats"
 ```
 
 ```
@@ -156,8 +156,8 @@ Options:
 ```
 
 ```bash
-forge build "a FastAPI backend" --deploy railway
-forge build "a Next.js app" --deploy vercel --max-cycles 3
+forgecli build "a FastAPI backend" --deploy railway
+forgecli build "a Next.js app" --deploy vercel --max-cycles 3
 ```
 
 ### Live feed
@@ -165,7 +165,7 @@ forge build "a Next.js app" --deploy vercel --max-cycles 3
 While Forge runs you get a live terminal dashboard:
 
 ```
- forge  ●  bookmarks-api  ●  CODING  ●  cycle 1/5
+ forgecli  ●  bookmarks-api  ●  CODING  ●  cycle 1/5
 
 ╭─ Overseer ──────────────────────────────────────────────────────────╮
 │  Dispatching 4 coding tasks (2 parallel). Next: integration.        │
@@ -187,14 +187,14 @@ Press **`i`** to pause and redirect Forge mid-build.
 ### Resume a session
 
 ```bash
-forge resume              # most recent session
-forge resume abc123       # specific session by ID
+forgecli resume              # most recent session
+forgecli resume abc123       # specific session by ID
 ```
 
 ### List sessions
 
 ```bash
-forge sessions
+forgecli sessions
 ```
 
 ```
@@ -207,8 +207,8 @@ forge sessions
 ### View logs
 
 ```bash
-forge logs              # most recent session
-forge logs abc123       # specific session
+forgecli logs              # most recent session
+forgecli logs abc123       # specific session
 ```
 
 ---
@@ -240,7 +240,7 @@ pytest tests/test_overseer.py -v  # specific file
 
 ```
 src/forge/
-├── cli.py              Typer CLI (build, setup, sessions, resume, logs)
+├── cli.py              Typer CLI (forgecli build, setup, sessions, resume, logs)
 ├── overseer.py         Main orchestration loop + phase transitions
 ├── session.py          Session create / load / resume
 ├── db.py               SQLite: sessions, tasks, artifacts, llm_calls, tool_calls
@@ -271,18 +271,18 @@ src/forge/
 
 ## Releasing
 
-Releases are fully automated. To ship a new version:
+To ship a new version:
 
 ```bash
 # 1. Bump version in pyproject.toml
 # 2. Commit and push to main
-git tag v0.1.3
-git push origin v0.1.3
+git tag v0.1.x
+git push origin v0.1.x
 ```
 
 The [release workflow](.github/workflows/release.yml) then:
 - Computes the tarball sha256
-- Updates `Formula/forge.rb` and commits it back to main
+- Updates the formula in [Ddundee/homebrew-forge](https://github.com/Ddundee/homebrew-forge)
 - Creates a GitHub Release with a changelog from git log
 
 The version badge above updates automatically when the release is published.

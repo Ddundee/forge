@@ -75,11 +75,11 @@ jobs:
           sed -i \
             -e "s|url \".*\"|url \"${URL}\"|" \
             -e "s|sha256 \".*\"|sha256 \"${SHA}\"|" \
-            Formula/forge.rb
+            Formula/forgecli.rb
 
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Formula/forge.rb
+          git add Formula/forgecli.rb
           git diff --cached --quiet \
             && echo "Formula already up to date." \
             || git commit -m "chore: update forge to ${VERSION}"
