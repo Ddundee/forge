@@ -52,7 +52,11 @@ class VerificationAgent(BaseAgent):
         try:
             report = json.loads(_extract_json(response))
         except json.JSONDecodeError:
-            return AgentResult(success=False, output=response, error="invalid_json")
+            report = {
+                "passed": [],
+                "failed": ["Verification agent returned malformed report"],
+                "errors": [response[:300]],
+            }
 
         success = len(report.get("failed", [])) == 0 and len(report.get("errors", [])) == 0
         return AgentResult(

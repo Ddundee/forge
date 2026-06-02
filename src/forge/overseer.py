@@ -180,7 +180,10 @@ class Overseer:
                 self.session.phase = Phase.FAILED
                 return
             self.session.increment_cycle()
-            report = json.loads(result.output)
+            try:
+                report = json.loads(result.output)
+            except (json.JSONDecodeError, ValueError):
+                report = {"failed": [result.output[:200]], "errors": []}
             for failure in report.get("failed", []):
                 self.session.db.create_task(
                     self.session.id, f"Fix: {failure}", "coding"
