@@ -1,0 +1,25 @@
+/** @type {import('jest').Config} */
+const config = {
+  testEnvironment: "node",
+  moduleNameMapper: {
+    "^(\\.{1,2}/.*)\\.js$": "$1",
+  },
+  transform: {
+    "^.+\\.tsx?$": [
+      "ts-jest",
+      {
+        tsconfig: {
+          module: "CommonJS",
+          moduleResolution: "node",
+          jsx: "react",
+          esModuleInterop: true,
+          strict: true,
+          skipLibCheck: true,
+        },
+      },
+    ],
+  },
+  testMatch: ["**/tests/**/*.test.ts"],
+};
+
+module.exports = config;
