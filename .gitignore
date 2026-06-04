@@ -4,6 +4,9 @@ docs/superpowers/
 plan.md
 plan_model_selection.md
 
+node_modules/
+graphify-out/
+
 __pycache__/
 *.pyc
 *.pyo
