@@ -14,7 +14,7 @@ program
   .option("--max-cycles <n>", "Max fix iterations", "5")
   .action(async (idea: string, opts: { deploy?: string; maxCycles: string }) => {
     loadKeys();
-    const session = Session.create(idea, opts.deploy);
+    const session = Session.create(idea, opts.deploy, undefined, process.cwd());
     const feed = startLiveFeed(idea);
 
     const onEvent = (message: string) => {

@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     cycle INTEGER NOT NULL DEFAULT 0,
     max_cycles INTEGER NOT NULL DEFAULT 5,
     deploy_target TEXT,
+    workspace TEXT,
     created_at TEXT NOT NULL,
     config_json TEXT NOT NULL DEFAULT '{}'
 );

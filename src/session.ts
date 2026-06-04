@@ -9,6 +9,16 @@ import { Phase, transition } from "./stateMachine.js";
 
 export const SESSIONS_DIR = path.join(os.homedir(), ".forge", "sessions");
 
+function ideaToSlug(idea: string): string {
+  return idea
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .split("-")
+    .slice(0, 6)
+    .join("-");
+}
+
 export class Session {
   constructor(
     public id: string,
@@ -23,18 +33,22 @@ export class Session {
     public config: ForgeConfig,
   ) {}
 
-  static create(idea: string, deployTarget?: string, sessionsDir = SESSIONS_DIR): Session {
+  static create(idea: string, deployTarget?: string, sessionsDir = SESSIONS_DIR, outputDir?: string): Session {
     const id = randomUUID().slice(0, 8);
     const sessionDir = path.join(sessionsDir, id);
-    fs.mkdirSync(path.join(sessionDir, "workspace"), { recursive: true });
     fs.mkdirSync(path.join(sessionDir, "logs"), { recursive: true });
+    const workspace = outputDir
+      ? path.join(outputDir, ideaToSlug(idea))
+      : path.join(sessionDir, "workspace");
+    fs.mkdirSync(workspace, { recursive: true });
     const cfg = loadConfig();
     const db = new ForgeDb(path.join(sessionDir, "session.db"));
     db.createSession(idea, id);
+    db.updateSession(id, { workspace });
     if (deployTarget) db.updateSession(id, { deploy_target: deployTarget });
     return new Session(
       id, idea, Phase.IDEATION, 0, cfg.maxCycles, deployTarget,
-      path.join(sessionDir, "workspace"),
+      workspace,
       db, new LLMRouter(cfg.tierModels()), cfg,
     );
   }
@@ -46,11 +60,14 @@ export class Session {
     const db = new ForgeDb(path.join(sessionDir, "session.db"));
     const row = db.getSession(sessionId);
     if (!row) throw new Error(`Session ${sessionId} not in database`);
+    const workspace = row["workspace"]
+      ? String(row["workspace"])
+      : path.join(sessionDir, "workspace");
     return new Session(
       sessionId, String(row["idea"]), row["phase"] as Phase,
       Number(row["cycle"]), Number(row["max_cycles"]),
       row["deploy_target"] as string | undefined,
-      path.join(sessionDir, "workspace"),
+      workspace,
       db, new LLMRouter(cfg.tierModels()), cfg,
     );
   }
