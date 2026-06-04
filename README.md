@@ -11,7 +11,7 @@
   <a href="LICENSE">
     <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green" />
   </a>
-  <img alt="Python" src="https://img.shields.io/badge/python-3.11%2B-blue" />
+  <img alt="Node.js" src="https://img.shields.io/badge/node-18%2B-brightgreen" />
   <a href="https://brew.sh">
     <img alt="Homebrew" src="https://img.shields.io/badge/install-Homebrew-orange" />
   </a>
@@ -77,13 +77,14 @@ brew install forgecli
 
 ### From source
 
-Requires **Python 3.11+** and [uv](https://github.com/astral-sh/uv).
+Requires **Node.js 18+**.
 
 ```bash
 git clone https://github.com/Ddundee/forge.git
 cd forge
-uv venv .venv && source .venv/bin/activate
-uv pip install -e .
+npm ci
+npm run build
+npm link
 ```
 
 ---
@@ -103,7 +104,7 @@ The interactive wizard:
 
 Keys are loaded automatically before every build — no need to export environment variables manually.
 
-**Supported providers:** Anthropic (Claude), OpenAI, Google (Gemini), Groq, Mistral, and 100+ others via [litellm](https://github.com/BerriAI/litellm).
+**Supported providers:** Anthropic (Claude), OpenAI, Google (Gemini), Groq, and Mistral.
 
 ### Manual config
 
@@ -230,41 +231,41 @@ Forge can build:
 ```bash
 git clone https://github.com/Ddundee/forge.git
 cd forge
-uv pip install -e ".[dev]"
+npm ci
 
-pytest -v          # run all 109 tests
-pytest tests/test_overseer.py -v  # specific file
+npm test           # run all 76 tests
+npm run build      # compile TypeScript → dist/
 ```
 
 **Project layout:**
 
 ```
-src/forge/
-├── cli.py              Typer CLI (forgecli build, setup, sessions, resume, logs)
-├── overseer.py         Main orchestration loop + phase transitions
-├── session.py          Session create / load / resume
-├── db.py               SQLite: sessions, tasks, artifacts, llm_calls, tool_calls
-├── state_machine.py    Valid phase transitions
-├── router.py           LLM routing via litellm (one-shot + agentic tool calls)
-├── config.py           Config loading, setup wizard
-├── model_fetch.py      Live model list fetching from provider APIs
+src/
+├── cli.ts              Commander CLI (forgecli build, setup, sessions, resume, logs, prompts)
+├── overseer.ts         Main orchestration loop + phase transitions
+├── session.ts          Session create / load / resume
+├── db.ts               SQLite: sessions, tasks, artifacts, llm_calls, tool_calls
+├── stateMachine.ts     Valid phase transitions
+├── router.ts           LLM routing via Vercel AI SDK (one-shot + agentic tool calls)
+├── config.ts           Config loading, setup wizard
+├── modelFetch.ts       Live model list fetching from provider APIs
 ├── agents/
-│   ├── base.py         BaseAgent + _run_agentic_loop()
-│   ├── ideation.py     Idea → spec (one-shot)
-│   ├── architecture.py Spec → stack + structure (one-shot)
-│   ├── task_graph.py   Spec → task DAG (one-shot)
-│   ├── coding.py       Task → code (agentic loop)
-│   ├── review.py       Code diff → review (one-shot)
-│   ├── integration.py  Workspace → wired project (agentic loop)
-│   ├── test_agent.py   Project → tests + run (agentic loop)
-│   ├── verification.py App → pass/fail report (agentic loop)
-│   └── deploy.py       Project → deployed URL
+│   ├── base.ts         BaseAgent + runAgenticLoop()
+│   ├── ideation.ts     Idea → spec (one-shot)
+│   ├── architecture.ts Spec → stack + structure (one-shot)
+│   ├── taskGraph.ts    Spec → task DAG (one-shot)
+│   ├── coding.ts       Task → code (agentic loop)
+│   ├── review.ts       Code diff → review (one-shot)
+│   ├── integration.ts  Workspace → wired project (agentic loop)
+│   ├── testAgent.ts    Project → tests + run (agentic loop)
+│   ├── verification.ts App → pass/fail report (agentic loop)
+│   └── deploy.ts       Project → deployed URL
 ├── tools/
-│   ├── definitions.py  Tool JSON schemas (bash_exec, read_file, write_file, list_dir)
-│   └── executor.py     Tool execution + workspace sandboxing + safety blocks
+│   ├── definitions.ts  Tool schemas via Vercel AI SDK + zod
+│   └── executor.ts     Tool execution + workspace sandboxing + safety blocks
 └── ui/
-    ├── live_feed.py    Rich terminal dashboard
-    └── interrupt.py    Keyboard interrupt handler
+    ├── liveFeed.tsx    Ink terminal dashboard (React for CLIs)
+    └── interrupt.ts    Keyboard interrupt handler
 ```
 
 ---
@@ -274,10 +275,10 @@ src/forge/
 To ship a new version:
 
 ```bash
-# 1. Bump version in pyproject.toml
+# 1. Bump version in package.json
 # 2. Commit and push to main
-git tag v0.1.x
-git push origin v0.1.x
+git tag v0.2.x
+git push origin v0.2.x
 ```
 
 The [release workflow](.github/workflows/release.yml) then:
@@ -292,7 +293,7 @@ The version badge above updates automatically when the release is published.
 ## Architecture notes
 
 - **SQLite state machine** — every phase transition is persisted. A crash mid-build resumes exactly where it left off.
-- **litellm** — one interface for every LLM provider. Switch any model tier in config without changing code.
+- **Vercel AI SDK** — one interface for every LLM provider. Switch any model tier in config without changing code. Supports Anthropic, OpenAI, Google, Groq, and Mistral out of the box.
 - **Agentic loops** — execution agents run multi-turn conversations with real tool access, not just one-shot JSON generation. They can read their own output, see failures, and fix them.
 - **Verification loop** — Forge doesn't stop at "code written". It builds the app, runs the test suite, and iterates on failures up to `max_cycles` times.
 - **No vendor lock-in** — the workspace is plain files. If Forge gets stuck, open the workspace and keep going yourself.
