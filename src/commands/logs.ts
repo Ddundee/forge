@@ -32,9 +32,10 @@ export async function showLogs(sessionId?: string): Promise<void> {
     console.log(`\n${chalk.bold.cyan(String(row["id"]))}  ${String(row["idea"]).slice(0, 50)}  ${chalk.dim(String(row["phase"]))}  ${chalk.green(`$${cost.toFixed(4)}`)}\n`);
   }
 
-  const events = (db as any).db.prepare("SELECT timestamp, phase, message FROM events ORDER BY timestamp").all() as any[];
+  const events = db.getEvents(sid);
   for (const e of events) {
-    const color = PHASE_COLORS[e.phase] ?? chalk.white;
-    console.log(`${chalk.dim(String(e.timestamp).slice(0, 19))} ${color(e.phase.padEnd(14))} ${e.message}`);
+    const phase = String(e.phase);
+    const color = PHASE_COLORS[phase] ?? chalk.white;
+    console.log(`${chalk.dim(String(e.timestamp).slice(0, 19))} ${color(phase.padEnd(14))} ${String(e.message)}`);
   }
 }

@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "crypto";
 
 const SCHEMA = `
@@ -68,10 +68,10 @@ function uid(): string { return randomUUID().slice(0, 8); }
 function now(): string { return new Date().toISOString(); }
 
 export class ForgeDb {
-  private db: Database.Database;
+  private db: DatabaseSync;
 
   constructor(dbPath: string) {
-    this.db = new Database(dbPath);
+    this.db = new DatabaseSync(dbPath);
     this.db.exec(SCHEMA);
   }
 
@@ -89,8 +89,8 @@ export class ForgeDb {
 
   updateSession(sessionId: string, fields: Record<string, unknown>): void {
     const sets = Object.keys(fields).map(k => `${k} = ?`).join(", ");
-    this.db.prepare(`UPDATE sessions SET ${sets} WHERE id = ?`)
-      .run(...Object.values(fields), sessionId);
+    const params = [...Object.values(fields), sessionId] as any[];
+    this.db.prepare(`UPDATE sessions SET ${sets} WHERE id = ?`).run(...params);
   }
 
   getTotalCost(sessionId: string): number {
@@ -119,8 +119,8 @@ export class ForgeDb {
   updateTask(taskId: string, fields: Record<string, unknown>): void {
     if (fields["status"] === "completed") fields["completed_at"] = now();
     const sets = Object.keys(fields).map(k => `${k} = ?`).join(", ");
-    this.db.prepare(`UPDATE tasks SET ${sets} WHERE id = ?`)
-      .run(...Object.values(fields), taskId);
+    const params = [...Object.values(fields), taskId] as any[];
+    this.db.prepare(`UPDATE tasks SET ${sets} WHERE id = ?`).run(...params);
   }
 
   getTasks(sessionId: string, status?: string): Record<string, unknown>[] {
@@ -165,6 +165,18 @@ export class ForgeDb {
     this.db.prepare(
       "INSERT INTO artifacts (id, session_id, file_path, content_snapshot, version, created_at) VALUES (?, ?, ?, ?, ?, ?)"
     ).run(uid(), sessionId, filePath, content, version, now());
+  }
+
+  getArtifacts(sessionId: string): Record<string, unknown>[] {
+    return this.db.prepare(
+      "SELECT * FROM artifacts WHERE session_id = ? ORDER BY version"
+    ).all(sessionId) as any[];
+  }
+
+  getEvents(sessionId: string): Record<string, unknown>[] {
+    return this.db.prepare(
+      "SELECT timestamp, phase, message FROM events WHERE session_id = ? ORDER BY timestamp"
+    ).all(sessionId) as any[];
   }
 
   close(): void { this.db.close(); }

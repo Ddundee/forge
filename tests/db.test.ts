@@ -54,10 +54,9 @@ test("updateTask sets completed_at when status is completed", () => {
 test("logEvent is retrievable", () => {
   const sid = db.createSession("idea");
   db.logEvent(sid, "IDEATION", "Starting ideation");
-  const db2 = db as any;
-  const events = db2.db.prepare("SELECT * FROM events WHERE session_id = ?").all(sid);
+  const events = db.getEvents(sid);
   expect(events).toHaveLength(1);
-  expect(events[0].message).toBe("Starting ideation");
+  expect(events[0]["message"]).toBe("Starting ideation");
 });
 
 test("logLlmCall persists cost", () => {
@@ -70,9 +69,8 @@ test("saveArtifact versions correctly", () => {
   const sid = db.createSession("idea");
   db.saveArtifact(sid, "src/main.ts", "v1");
   db.saveArtifact(sid, "src/main.ts", "v2");
-  const db2 = db as any;
-  const rows = db2.db.prepare("SELECT version FROM artifacts WHERE session_id = ? ORDER BY version").all(sid);
-  expect(rows.map((r: any) => r.version)).toEqual([1, 2]);
+  const rows = db.getArtifacts(sid);
+  expect(rows.map((r) => r["version"])).toEqual([1, 2]);
 });
 
 test("listSessions aggregates total_cost", () => {
