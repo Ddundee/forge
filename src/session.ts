@@ -9,15 +9,6 @@ import { Phase, transition } from "./stateMachine.js";
 
 export const SESSIONS_DIR = path.join(os.homedir(), ".forge", "sessions");
 
-function ideaToSlug(idea: string): string {
-  return idea
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .split("-")
-    .slice(0, 6)
-    .join("-");
-}
 
 export class Session {
   constructor(
@@ -33,22 +24,20 @@ export class Session {
     public config: ForgeConfig,
   ) {}
 
-  static create(idea: string, deployTarget?: string, sessionsDir = SESSIONS_DIR, outputDir?: string): Session {
+  static create(idea: string, deployTarget?: string, sessionsDir = SESSIONS_DIR, workspace?: string): Session {
     const id = randomUUID().slice(0, 8);
     const sessionDir = path.join(sessionsDir, id);
     fs.mkdirSync(path.join(sessionDir, "logs"), { recursive: true });
-    const workspace = outputDir
-      ? path.join(outputDir, ideaToSlug(idea))
-      : path.join(sessionDir, "workspace");
-    fs.mkdirSync(workspace, { recursive: true });
+    const resolvedWorkspace = workspace ?? path.join(sessionDir, "workspace");
+    fs.mkdirSync(resolvedWorkspace, { recursive: true });
     const cfg = loadConfig();
     const db = new ForgeDb(path.join(sessionDir, "session.db"));
     db.createSession(idea, id);
-    db.updateSession(id, { workspace });
+    db.updateSession(id, { workspace: resolvedWorkspace });
     if (deployTarget) db.updateSession(id, { deploy_target: deployTarget });
     return new Session(
       id, idea, Phase.IDEATION, 0, cfg.maxCycles, deployTarget,
-      workspace,
+      resolvedWorkspace,
       db, new LLMRouter(cfg.tierModels()), cfg,
     );
   }
