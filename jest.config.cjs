@@ -20,6 +20,7 @@ const config = {
     ],
   },
   testMatch: ["**/tests/**/*.test.ts"],
+  forceExit: true,
 };
 
 module.exports = config;
