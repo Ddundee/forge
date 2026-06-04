@@ -54,8 +54,48 @@ program.command("sessions").action(async () => {
 program.command("resume [sessionId]").action(async (sessionId?: string) => {
   loadKeys();
   const session = sessionId ? Session.load(sessionId) : Session.loadLast();
-  const overseer = new Overseer(session, msg => console.log(` ${msg}`));
-  await overseer.run();
+
+  if (session.phase === Phase.DONE || session.phase === Phase.FAILED) {
+    const tasks = session.db.getTasks(session.id);
+    const done = tasks.filter(t => t["status"] === "completed").length;
+    console.log(`\nSession: ${session.id}`);
+    console.log(`  Phase : ${session.phase}`);
+    console.log(`  Idea  : ${session.idea}`);
+    console.log(`  Tasks : ${done}/${tasks.length} completed`);
+    console.log(`  Workspace: ${session.workspace}\n`);
+    return;
+  }
+
+  const feed = startLiveFeed(session.idea);
+
+  const onEvent = (message: string) => {
+    feed.setOverseer(message);
+    feed.pushEvent(session.phase, message);
+    feed.setCycle(session.cycle);
+    feed.setTotalCost(session.db.getTotalCost(session.id));
+    for (const task of session.db.getTasks(session.id)) {
+      feed.updateTask(String(task["id"]), String(task["title"]), String(task["status"]));
+    }
+  };
+
+  // Replay existing tasks into the feed so the pane isn't empty on resume
+  for (const task of session.db.getTasks(session.id)) {
+    feed.updateTask(String(task["id"]), String(task["title"]), String(task["status"]));
+  }
+
+  const overseer = new Overseer(session, onEvent);
+  try {
+    await overseer.run();
+  } finally {
+    feed.stop();
+  }
+
+  const finalPhase: string = session.phase;
+  if (finalPhase === Phase.DONE) {
+    console.log(`\n✓ Done! Workspace: ${session.workspace}`);
+  } else {
+    console.log(`\nStopped at phase: ${finalPhase}`);
+  }
 });
 
 program.command("logs [sessionId]").action(async (sessionId?: string) => {

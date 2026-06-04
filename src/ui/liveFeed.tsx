@@ -171,7 +171,7 @@ export function startLiveFeed(idea: string): LiveFeedHandle {
   // Switch to alternate screen buffer so the TUI doesn't scroll the shell history
   if (process.stdout.isTTY) process.stdout.write("\x1b[?1049h\x1b[2J\x1b[H");
 
-  const { unmount } = render(<TUI r={r} />, { exitOnCtrlC: false });
+  const { unmount } = render(<TUI r={r} />, { exitOnCtrlC: false, stdout: process.stdout });
 
   return {
     setOverseer(msg) { r.overseerMsg = msg; },
