@@ -2,6 +2,7 @@ import { generateText, CoreMessage } from "ai";
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
+import { type MdCatalog, findModel, calcCost } from "./modelsdev.js";
 
 export enum ModelTier {
   OVERSEER = "overseer",
@@ -49,9 +50,11 @@ export class LLMTimeoutError extends Error {
 
 export class LLMRouter {
   private models: Record<ModelTier, string>;
+  private catalog: MdCatalog | null;
 
-  constructor(tierModels?: Partial<Record<ModelTier, string>>) {
+  constructor(tierModels?: Partial<Record<ModelTier, string>>, catalog?: MdCatalog) {
     this.models = { ...DEFAULT_MODELS, ...tierModels };
+    this.catalog = catalog ?? null;
   }
 
   modelFor(tier: ModelTier): string {
@@ -70,12 +73,13 @@ export class LLMRouter {
       setTimeout(() => reject(new LLMTimeoutError(timeoutMs / 1000, modelId)), timeoutMs)
     );
     const result = await Promise.race([call, timeout]);
+    const mdModel = this.catalog ? findModel(this.catalog, modelId) : undefined;
     return {
       content: result.text,
       model: modelId,
       tokensIn: result.usage.promptTokens,
       tokensOut: result.usage.completionTokens,
-      costUsd: 0,
+      costUsd: calcCost(mdModel, result.usage.promptTokens, result.usage.completionTokens),
     };
   }
 
@@ -97,13 +101,14 @@ export class LLMRouter {
       name: tc.toolName,
       arguments: tc.args ?? {},
     }));
+    const mdModel = this.catalog ? findModel(this.catalog, modelId) : undefined;
     return {
       text: result.text || null,
       toolCalls,
       model: modelId,
       tokensIn: result.usage.promptTokens,
       tokensOut: result.usage.completionTokens,
-      costUsd: 0,
+      costUsd: calcCost(mdModel, result.usage.promptTokens, result.usage.completionTokens),
     };
   }
 

@@ -113,20 +113,28 @@ export async function runSetupWizard(): Promise<ForgeConfig> {
     else if (existing) keys[envVar] = existing;
   }
 
-  console.log("\nFetching available models…");
-  const { fetchModelsForProvider } = await import("./modelFetch.js");
-  const allModels: string[] = [];
-  const seen = new Set<string>();
-  for (const provider of providers) {
-    const [envVar] = PROVIDER_KEY_MAP[provider];
-    const apiKey = keys[envVar] ?? process.env[envVar] ?? "";
-    for (const m of await fetchModelsForProvider(provider, apiKey)) {
-      if (!seen.has(m)) { seen.add(m); allModels.push(m); }
-    }
-  }
+  console.log("\nFetching available models from models.dev…");
+  const { fetchAllToolCallModels } = await import("./modelFetch.js");
+  const LABEL_TO_PROVIDER: Record<string, string> = {
+    "Anthropic (Claude)": "anthropic",
+    "OpenAI": "openai",
+    "Google (Gemini)": "google",
+    "Groq": "groq",
+    "Mistral": "mistral",
+  };
+  const selectedProviderIds = providers.map(p => LABEL_TO_PROVIDER[p]).filter(Boolean);
+  const allModelChoices = (await fetchAllToolCallModels())
+    .filter(c => selectedProviderIds.some(pid => {
+      // keep models whose id prefix matches a selected provider
+      if (pid === "anthropic") return c.value.startsWith("claude");
+      if (pid === "openai") return c.value.startsWith("gpt") || c.value.startsWith("o3") || c.value.startsWith("o4");
+      if (pid === "google") return c.value.startsWith("gemini");
+      if (pid === "groq" || pid === "mistral") return c.name.toLowerCase().includes(pid);
+      return false;
+    }));
 
   const chosenModels: Record<string, string> = {};
-  if (allModels.length) {
+  if (allModelChoices.length) {
     const tiers: [ModelTier, string][] = [
       [ModelTier.OVERSEER, "Overseer   — architecture & planning (most capable)"],
       [ModelTier.REASONING, "Reasoning  — coding & integration (smart + fast)"],
@@ -134,7 +142,7 @@ export async function runSetupWizard(): Promise<ForgeConfig> {
       [ModelTier.FAST, "Fast       — quick single-turn calls (cheapest)"],
     ];
     for (const [tier, desc] of tiers) {
-      chosenModels[tier] = await select({ message: desc, choices: allModels.map(m => ({ name: m, value: m })) });
+      chosenModels[tier] = await select({ message: desc, choices: allModelChoices });
     }
   }
 

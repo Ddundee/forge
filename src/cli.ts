@@ -5,6 +5,7 @@ import { Session } from "./session.js";
 import { Overseer } from "./overseer.js";
 import { startLiveFeed } from "./ui/liveFeed.js";
 import { Phase } from "./stateMachine.js";
+import { getCatalog } from "./modelsdev.js";
 
 const program = new Command("forgecli").description("Idea to product in one command.");
 
@@ -14,7 +15,8 @@ program
   .option("--max-cycles <n>", "Max fix iterations", "5")
   .action(async (idea: string, opts: { deploy?: string; maxCycles: string }) => {
     loadKeys();
-    const session = Session.create(idea, opts.deploy, undefined, process.cwd());
+    const catalog = await getCatalog().catch(() => undefined);
+    const session = Session.create(idea, opts.deploy, undefined, process.cwd(), catalog);
     const feed = startLiveFeed(idea);
 
     const onEvent = (message: string) => {
@@ -53,7 +55,8 @@ program.command("sessions").action(async () => {
 
 program.command("resume [sessionId]").action(async (sessionId?: string) => {
   loadKeys();
-  const session = sessionId ? Session.load(sessionId) : Session.loadLast();
+  const catalog = await getCatalog().catch(() => undefined);
+  const session = sessionId ? Session.load(sessionId, undefined, catalog) : Session.loadLast(undefined, catalog);
 
   if (session.phase === Phase.DONE || session.phase === Phase.FAILED) {
     const tasks = session.db.getTasks(session.id);

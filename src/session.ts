@@ -6,6 +6,7 @@ import { ForgeDb } from "./db.js";
 import { LLMRouter } from "./router.js";
 import { ForgeConfig, loadConfig } from "./config.js";
 import { Phase, transition } from "./stateMachine.js";
+import { type MdCatalog } from "./modelsdev.js";
 
 export const SESSIONS_DIR = path.join(os.homedir(), ".forge", "sessions");
 
@@ -24,7 +25,7 @@ export class Session {
     public config: ForgeConfig,
   ) {}
 
-  static create(idea: string, deployTarget?: string, sessionsDir = SESSIONS_DIR, workspace?: string): Session {
+  static create(idea: string, deployTarget?: string, sessionsDir = SESSIONS_DIR, workspace?: string, catalog?: MdCatalog): Session {
     const id = randomUUID().slice(0, 8);
     const sessionDir = path.join(sessionsDir, id);
     fs.mkdirSync(path.join(sessionDir, "logs"), { recursive: true });
@@ -38,11 +39,11 @@ export class Session {
     return new Session(
       id, idea, Phase.IDEATION, 0, cfg.maxCycles, deployTarget,
       resolvedWorkspace,
-      db, new LLMRouter(cfg.tierModels()), cfg,
+      db, new LLMRouter(cfg.tierModels(), catalog), cfg,
     );
   }
 
-  static load(sessionId: string, sessionsDir = SESSIONS_DIR): Session {
+  static load(sessionId: string, sessionsDir = SESSIONS_DIR, catalog?: MdCatalog): Session {
     const sessionDir = path.join(sessionsDir, sessionId);
     if (!fs.existsSync(sessionDir)) throw new Error(`Session ${sessionId} not found`);
     const cfg = loadConfig();
@@ -57,18 +58,18 @@ export class Session {
       Number(row["cycle"]), Number(row["max_cycles"]),
       row["deploy_target"] as string | undefined,
       workspace,
-      db, new LLMRouter(cfg.tierModels()), cfg,
+      db, new LLMRouter(cfg.tierModels(), catalog), cfg,
     );
   }
 
-  static loadLast(sessionsDir = SESSIONS_DIR): Session {
+  static loadLast(sessionsDir = SESSIONS_DIR, catalog?: MdCatalog): Session {
     if (!fs.existsSync(sessionsDir)) throw new Error("No sessions found");
     const dirs = fs.readdirSync(sessionsDir)
       .filter(name => fs.statSync(path.join(sessionsDir, name)).isDirectory())
       .map(name => ({ name, mtime: fs.statSync(path.join(sessionsDir, name)).mtimeMs }))
       .sort((a, b) => b.mtime - a.mtime);
     if (!dirs.length) throw new Error("No sessions found");
-    return Session.load(dirs[0].name, sessionsDir);
+    return Session.load(dirs[0].name, sessionsDir, catalog);
   }
 
   advancePhase(next: Phase): void {
