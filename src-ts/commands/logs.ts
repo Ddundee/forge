@@ -1,9 +1,9 @@
 import * as path from "path";
-import chalk from "chalk";
+import chalk, { type ChalkInstance } from "chalk";
 import { SESSIONS_DIR, Session } from "../session.js";
 import { ForgeDb } from "../db.js";
 
-const PHASE_COLORS: Record<string, chalk.Chalk> = {
+const PHASE_COLORS: Record<string, ChalkInstance> = {
   IDEATION: chalk.magenta,
   ARCHITECTURE: chalk.blue,
   TASK_GRAPH: chalk.yellow,

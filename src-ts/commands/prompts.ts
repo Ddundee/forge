@@ -1,9 +1,9 @@
 import * as fs from "fs";
-import chalk from "chalk";
+import chalk, { type ChalkInstance } from "chalk";
 import { logPath } from "../promptLog.js";
 import { Session } from "../session.js";
 
-const TIER_COLORS: Record<string, chalk.Chalk> = {
+const TIER_COLORS: Record<string, ChalkInstance> = {
   overseer: chalk.magenta,
   reasoning: chalk.blue,
   standard: chalk.cyan,
