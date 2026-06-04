@@ -123,15 +123,8 @@ export async function runSetupWizard(): Promise<ForgeConfig> {
     "Mistral": "mistral",
   };
   const selectedProviderIds = providers.map(p => LABEL_TO_PROVIDER[p]).filter(Boolean);
-  const allModelChoices = (await fetchAllToolCallModels())
-    .filter(c => selectedProviderIds.some(pid => {
-      // keep models whose id prefix matches a selected provider
-      if (pid === "anthropic") return c.value.startsWith("claude");
-      if (pid === "openai") return c.value.startsWith("gpt") || c.value.startsWith("o3") || c.value.startsWith("o4");
-      if (pid === "google") return c.value.startsWith("gemini");
-      if (pid === "groq" || pid === "mistral") return c.name.toLowerCase().includes(pid);
-      return false;
-    }));
+  // Force-refresh catalog so setup always sees the latest models
+  const allModelChoices = await fetchAllToolCallModels(selectedProviderIds, true);
 
   const chosenModels: Record<string, string> = {};
   if (allModelChoices.length) {

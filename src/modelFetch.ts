@@ -13,17 +13,18 @@ export async function fetchModelsForProvider(providerLabel: string): Promise<str
   if (!pid) return [];
   try {
     const catalog = await getCatalog();
-    return listToolCallModels(catalog, [pid]).map(({ model }) => model.id);
+    return listToolCallModels(catalog, [pid], true).map(({ model }) => model.id);
   } catch {
     return [];
   }
 }
 
-export async function fetchAllToolCallModels(): Promise<
-  Array<{ value: string; name: string }>
-> {
-  const catalog = await getCatalog();
-  return listToolCallModels(catalog, SUPPORTED_PROVIDERS).map(({ providerName, model }) => ({
+export async function fetchAllToolCallModels(
+  providerIds = SUPPORTED_PROVIDERS,
+  refresh = false,
+): Promise<Array<{ value: string; name: string }>> {
+  const catalog = await getCatalog(refresh);
+  return listToolCallModels(catalog, providerIds, true).map(({ providerName, model }) => ({
     value: model.id,
     name: `${providerName}  ${model.name}  (${fmtCost(model)})`,
   }));

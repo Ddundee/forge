@@ -49,15 +49,27 @@ export async function getCatalog(refresh = false): Promise<MdCatalog> {
 
 export const SUPPORTED_PROVIDERS = ["anthropic", "openai", "google", "groq", "mistral"];
 
+// Current and previous generation models per provider.
+// These are the IDs forge exposes in setup; older/experimental variants are hidden.
+export const GENERATION_FILTERS: Record<string, RegExp> = {
+  anthropic: /^claude-(opus|sonnet|haiku)-4/,
+  openai:    /^gpt-5\.[45]|^o[34]/,
+  google:    /^gemini-2\./,
+  groq:      /^(llama-3\.3|meta-llama\/llama-4|moonshotai\/kimi-k2|groq\/compound)/,
+  mistral:   /^(mistral-(large|medium|small)-latest|codestral-latest|devstral-latest|magistral)/,
+};
+
 export function listToolCallModels(
   catalog: MdCatalog,
   providerIds = SUPPORTED_PROVIDERS,
+  currentGenOnly = false,
 ): Array<{ providerId: string; providerName: string; model: MdModel }> {
   return providerIds.flatMap(pid => {
     const prov = catalog[pid];
     if (!prov) return [];
+    const genFilter = currentGenOnly ? GENERATION_FILTERS[pid] : null;
     return Object.values(prov.models)
-      .filter(m => m.tool_call)
+      .filter(m => m.tool_call && (!genFilter || genFilter.test(m.id)))
       .map(m => ({ providerId: pid, providerName: prov.name, model: m }));
   });
 }
