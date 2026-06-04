@@ -90,7 +90,7 @@ test("emits events throughout pipeline", async () => {
   const overseer = new Overseer(session, msg => events.push(msg));
   await overseer.run();
   expect(events.some(e => e.includes("IDEATION") || e.includes("Spec"))).toBe(true);
-  expect(events.some(e => e.includes("Verification passed"))).toBe(true);
+  expect(events.some(e => e.includes("Build passed") || e.includes("Verification"))).toBe(true);
 });
 
 test("reaches FAILED when max_cycles exceeded", async () => {

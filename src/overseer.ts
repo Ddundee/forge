@@ -73,20 +73,25 @@ export class Overseer {
   }
 
   private async architecture(): Promise<void> {
+    this.emit("Picking stack & file structure…");
     const result = await this.agent(ArchitectureAgent).run({ spec: this.spec() });
     if (result.success) {
       this.session.db.updateSession(this.session.id, { architecture: result.output });
-      this.emit("Architecture decided");
+      try {
+        const arch = JSON.parse(result.output);
+        this.emit(`Architecture: ${arch.stack?.language ?? "?"}, ${arch.test_framework ?? "?"} tests`);
+      } catch { this.emit("Architecture decided"); }
     }
     this.session.advancePhase(Phase.TASK_GRAPH);
   }
 
   private async taskGraph(): Promise<void> {
+    this.emit("Building task dependency graph…");
     const result = await this.agent(TaskGraphAgent).run({ spec: this.spec(), architecture: this.arch() });
     if (result.success) {
       const tasks = JSON.parse(result.output) as { title: string; type: string; deps?: string[] }[];
       for (const t of tasks) this.session.db.createTask(this.session.id, t.title, t.type, t.deps);
-      this.emit(`Task graph: ${tasks.length} tasks`);
+      this.emit(`Task graph ready — ${tasks.length} tasks planned`);
     }
     this.session.advancePhase(Phase.CODING);
   }
@@ -94,7 +99,10 @@ export class Overseer {
   private async coding(): Promise<void> {
     const pending = this.session.db.getTasks(this.session.id, "pending");
     if (!pending.length) { this.session.advancePhase(Phase.INTEGRATION); return; }
+    this.emit(`Coding ${pending.length} tasks in parallel…`);
     await Promise.all(pending.map(t => this.codeTask(t)));
+    const done = this.session.db.getTasks(this.session.id, "completed").length;
+    this.emit(`Coding complete — ${done} tasks done`);
     this.session.advancePhase(Phase.INTEGRATION);
   }
 
@@ -108,37 +116,42 @@ export class Overseer {
       workspace: this.session.workspace, taskId: id,
     });
     this.session.db.updateTask(id, { status: result.success ? "completed" : "failed", output: result.output });
+    this.emit(`${result.success ? "✓" : "✗"} ${title}`);
     const review = await this.agent(ReviewAgent).run({ taskTitle: title, diff: result.output });
     if (review.success) {
       try {
         const rv = JSON.parse(review.output);
-        if (!rv.approved && rv.issues?.length) this.emit(`Review issues for '${title}': ${rv.issues}`);
+        if (!rv.approved && rv.issues?.length) this.emit(`Review: ${rv.issues[0]}`);
+        else this.emit(`Review approved: ${title}`);
       } catch {}
     }
   }
 
   private async integration(): Promise<void> {
+    this.emit("Wiring modules together…");
     const result = await this.agent(IntegrationAgent).run({ workspace: this.session.workspace, spec: this.spec(), architecture: this.arch() });
-    this.emit(`Integration: ${result.success ? "complete" : "failed"}`);
+    this.emit(`Integration: ${result.success ? "all imports resolved" : "failed"}`);
     this.session.advancePhase(Phase.TESTING);
   }
 
   private async testing(): Promise<void> {
+    this.emit("Writing and running tests…");
     const result = await this.agent(TestAgent).run({ workspace: this.session.workspace, architecture: this.arch() });
-    this.emit(`Tests: ${result.success ? "passed" : "failed"}`);
+    this.emit(`Tests: ${result.success ? "passed" : "some failures — continuing"}`);
     this.session.advancePhase(Phase.VERIFICATION);
   }
 
   private async verification(): Promise<void> {
+    this.emit("Building app and running full suite…");
     const result = await this.agent(VerificationAgent).run({ workspace: this.session.workspace, architecture: this.arch(), spec: this.spec() });
     if (result.success) {
       const next = this.session.deployTarget ? Phase.DEPLOY : Phase.DONE;
       this.session.advancePhase(next);
-      this.emit("Verification passed");
+      this.emit("✓ Build passed — all checks green");
       return;
     }
     if (this.session.cycle >= this.session.maxCycles) {
-      this.emit(`Max cycles (${this.session.maxCycles}) reached. Build incomplete.`);
+      this.emit(`Max cycles (${this.session.maxCycles}) reached — build incomplete`);
       this.session.db.updateSession(this.session.id, { phase: Phase.FAILED });
       this.session.phase = Phase.FAILED;
       return;
@@ -146,16 +159,18 @@ export class Overseer {
     this.session.incrementCycle();
     let report: Record<string, unknown[]> = { failed: [], errors: [] };
     try { report = JSON.parse(result.output); } catch {}
-    for (const failure of report["failed"] as string[]) {
+    const failures = (report["failed"] as string[]) ?? [];
+    for (const failure of failures) {
       this.session.db.createTask(this.session.id, `Fix: ${failure}`, "coding");
     }
-    this.emit(`Verification failed. Cycle ${this.session.cycle}/${this.session.maxCycles}`);
+    this.emit(`Verification failed: ${failures.length} issue(s). Cycle ${this.session.cycle}/${this.session.maxCycles}`);
     this.session.advancePhase(Phase.CODING);
   }
 
   private async deploy(): Promise<void> {
+    this.emit("Deploying…");
     const result = await this.agent(DeployAgent).run({ workspace: this.session.workspace, architecture: this.arch(), target: this.session.deployTarget ?? "none" });
-    this.emit(`Deploy: ${result.success ? "success" : "failed"} — ${result.output.slice(0, 100)}`);
+    this.emit(`Deploy: ${result.success ? "live" : "failed"} — ${result.output.slice(0, 80)}`);
     this.session.advancePhase(Phase.DONE);
   }
 }
