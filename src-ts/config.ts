@@ -1,0 +1,149 @@
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
+import { ModelTier, DEFAULT_MODELS } from "./router.js";
+
+export const CONFIG_DIR = path.join(os.homedir(), ".forge");
+export const CONFIG_FILE = path.join(CONFIG_DIR, "config.toml");
+export const KEYS_FILE = path.join(CONFIG_DIR, "keys.env");
+
+export const PROVIDER_PROFILES: Record<string, Record<ModelTier, string>> = {
+  "claude-primary": {
+    [ModelTier.OVERSEER]: "claude-opus-4-8",
+    [ModelTier.REASONING]: "claude-sonnet-4-6",
+    [ModelTier.STANDARD]: "claude-haiku-4-5-20251001",
+    [ModelTier.FAST]: "claude-haiku-4-5-20251001",
+  },
+  "openai-primary": {
+    [ModelTier.OVERSEER]: "gpt-4o",
+    [ModelTier.REASONING]: "o3-mini",
+    [ModelTier.STANDARD]: "gpt-4o-mini",
+    [ModelTier.FAST]: "gpt-4o-mini",
+  },
+  "mixed-cost-optimized": {
+    [ModelTier.OVERSEER]: "claude-sonnet-4-6",
+    [ModelTier.REASONING]: "claude-sonnet-4-6",
+    [ModelTier.STANDARD]: "gemini/gemini-2.0-flash",
+    [ModelTier.FAST]: "gemini/gemini-2.0-flash",
+  },
+};
+
+export class ForgeConfig {
+  constructor(
+    public profile = "claude-primary",
+    public models: Record<string, string> = {},
+    public maxCycles = 5,
+  ) {}
+
+  tierModels(): Record<ModelTier, string> {
+    const base = { ...(PROVIDER_PROFILES[this.profile] ?? PROVIDER_PROFILES["claude-primary"]) };
+    for (const [tierName, model] of Object.entries(this.models)) {
+      if (Object.values(ModelTier).includes(tierName as ModelTier)) {
+        base[tierName as ModelTier] = model;
+      }
+    }
+    return base;
+  }
+}
+
+export function loadConfig(configFile = CONFIG_FILE): ForgeConfig {
+  if (!fs.existsSync(configFile)) return new ForgeConfig();
+  const data = parseToml(fs.readFileSync(configFile, "utf8")) as any;
+  return new ForgeConfig(
+    data.profile ?? "claude-primary",
+    data.models ?? {},
+    data.max_cycles ?? 5,
+  );
+}
+
+export function saveConfig(cfg: ForgeConfig, configFile = CONFIG_FILE): void {
+  fs.mkdirSync(path.dirname(configFile), { recursive: true });
+  fs.writeFileSync(configFile, stringifyToml({ profile: cfg.profile, models: cfg.models, max_cycles: cfg.maxCycles }));
+}
+
+export function saveKeys(keys: Record<string, string>, keysFile = KEYS_FILE): void {
+  fs.mkdirSync(path.dirname(keysFile), { recursive: true });
+  fs.writeFileSync(keysFile, Object.entries(keys).map(([k, v]) => `${k}=${v}`).join("\n") + "\n", { mode: 0o600 });
+}
+
+export function loadKeys(keysFile = KEYS_FILE): void {
+  if (!fs.existsSync(keysFile)) return;
+  for (const line of fs.readFileSync(keysFile, "utf8").split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) continue;
+    const [key, ...rest] = trimmed.split("=");
+    if (!(key in process.env)) process.env[key] = rest.join("=");
+  }
+}
+
+export async function runSetupWizard(): Promise<ForgeConfig> {
+  const { select, checkbox, password } = await import("@inquirer/prompts");
+
+  console.log("\n⚒  FORGE  —  idea to product in one command\n");
+
+  await select({
+    message: "What matters most to you?",
+    choices: [
+      { name: "Quality  — best output, higher cost", value: "quality" },
+      { name: "Speed    — fastest responses", value: "speed" },
+      { name: "Cost     — minimize spend", value: "cost" },
+    ],
+  });
+
+  const providers = await checkbox({
+    message: "Which API providers do you have keys for?",
+    choices: ["Anthropic (Claude)", "OpenAI", "Google (Gemini)", "Groq", "Mistral"].map(n => ({ name: n, value: n })),
+  });
+
+  const PROVIDER_KEY_MAP: Record<string, [string, string]> = {
+    "Anthropic (Claude)": ["ANTHROPIC_API_KEY", "Anthropic API key"],
+    "OpenAI": ["OPENAI_API_KEY", "OpenAI API key"],
+    "Google (Gemini)": ["GOOGLE_API_KEY", "Google API key"],
+    "Groq": ["GROQ_API_KEY", "Groq API key"],
+    "Mistral": ["MISTRAL_API_KEY", "Mistral API key"],
+  };
+
+  const keys: Record<string, string> = {};
+  for (const provider of providers) {
+    const [envVar, label] = PROVIDER_KEY_MAP[provider];
+    const existing = process.env[envVar] ?? "";
+    const entered = await password({ message: `${label} [${envVar}]${existing ? " (already set, Enter to keep)" : ""}:` });
+    if (entered) keys[envVar] = entered;
+    else if (existing) keys[envVar] = existing;
+  }
+
+  console.log("\nFetching available models…");
+  const { fetchModelsForProvider } = await import("./modelFetch.js");
+  const allModels: string[] = [];
+  const seen = new Set<string>();
+  for (const provider of providers) {
+    const [envVar] = PROVIDER_KEY_MAP[provider];
+    const apiKey = keys[envVar] ?? process.env[envVar] ?? "";
+    for (const m of await fetchModelsForProvider(provider, apiKey)) {
+      if (!seen.has(m)) { seen.add(m); allModels.push(m); }
+    }
+  }
+
+  const chosenModels: Record<string, string> = {};
+  if (allModels.length) {
+    const tiers: [ModelTier, string][] = [
+      [ModelTier.OVERSEER, "Overseer   — architecture & planning (most capable)"],
+      [ModelTier.REASONING, "Reasoning  — coding & integration (smart + fast)"],
+      [ModelTier.STANDARD, "Standard   — review & task graph (balanced)"],
+      [ModelTier.FAST, "Fast       — quick single-turn calls (cheapest)"],
+    ];
+    for (const [tier, desc] of tiers) {
+      chosenModels[tier] = await select({ message: desc, choices: allModels.map(m => ({ name: m, value: m })) });
+    }
+  }
+
+  const profile = providers.includes("Anthropic (Claude)") ? "claude-primary"
+    : providers.includes("OpenAI") ? "openai-primary" : "claude-primary";
+
+  const cfg = new ForgeConfig(profile, chosenModels);
+  saveConfig(cfg);
+  if (Object.keys(keys).length) saveKeys(keys);
+  console.log("\n✓ Configuration saved to ~/.forge/config.toml\n");
+  return cfg;
+}
