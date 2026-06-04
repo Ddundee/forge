@@ -1,8 +1,8 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { Session } from "../src-ts/session.js";
-import { Phase, InvalidTransitionError } from "../src-ts/stateMachine.js";
+import { Session } from "../src/session.js";
+import { Phase, InvalidTransitionError } from "../src/stateMachine.js";
 
 let tmpDir: string;
 

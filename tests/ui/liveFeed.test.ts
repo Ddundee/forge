@@ -1,4 +1,4 @@
-import { startLiveFeed } from "../../src-ts/ui/liveFeed.js";
+import { startLiveFeed } from "../../src/ui/liveFeed.js";
 
 // ink renders to a virtual terminal — mock render to avoid tty dependency
 jest.mock("ink", () => ({

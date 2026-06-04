@@ -1,4 +1,4 @@
-import { TOOL_DEFINITIONS } from "../../src-ts/tools/definitions.js";
+import { TOOL_DEFINITIONS } from "../../src/tools/definitions.js";
 
 test("TOOL_DEFINITIONS contains all four tools", () => {
   expect(Object.keys(TOOL_DEFINITIONS)).toEqual(

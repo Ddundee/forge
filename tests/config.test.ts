@@ -1,8 +1,8 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { ForgeConfig, loadConfig, saveConfig, loadKeys, PROVIDER_PROFILES } from "../src-ts/config.js";
-import { ModelTier } from "../src-ts/router.js";
+import { ForgeConfig, loadConfig, saveConfig, loadKeys, PROVIDER_PROFILES } from "../src/config.js";
+import { ModelTier } from "../src/router.js";
 
 let tmpDir: string;
 

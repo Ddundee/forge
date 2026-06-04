@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { PromptLogger, logPath } from "../src-ts/promptLog.js";
+import { PromptLogger, logPath } from "../src/promptLog.js";
 
 let tmpDir: string;
 beforeEach(() => { tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "forge-log-test-")); });

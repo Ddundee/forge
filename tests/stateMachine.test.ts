@@ -1,4 +1,4 @@
-import { Phase, transition, InvalidTransitionError } from "../src-ts/stateMachine.js";
+import { Phase, transition, InvalidTransitionError } from "../src/stateMachine.js";
 
 test("valid transition IDEATION → ARCHITECTURE", () => {
   expect(transition(Phase.IDEATION, Phase.ARCHITECTURE)).toBe(Phase.ARCHITECTURE);

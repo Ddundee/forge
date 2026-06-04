@@ -1,11 +1,11 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { CodingAgent } from "../../src-ts/agents/coding.js";
-import { IntegrationAgent } from "../../src-ts/agents/integration.js";
-import { TestAgent } from "../../src-ts/agents/testAgent.js";
-import { VerificationAgent } from "../../src-ts/agents/verification.js";
-import { ForgeDb } from "../../src-ts/db.js";
+import { CodingAgent } from "../../src/agents/coding.js";
+import { IntegrationAgent } from "../../src/agents/integration.js";
+import { TestAgent } from "../../src/agents/testAgent.js";
+import { VerificationAgent } from "../../src/agents/verification.js";
+import { ForgeDb } from "../../src/db.js";
 
 let workspace: string;
 let db: ForgeDb;

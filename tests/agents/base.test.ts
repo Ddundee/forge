@@ -1,6 +1,6 @@
-import { BaseAgent, AgentResult } from "../../src-ts/agents/base.js";
-import { LLMRouter, ModelTier } from "../../src-ts/router.js";
-import { ForgeDb } from "../../src-ts/db.js";
+import { BaseAgent, AgentResult } from "../../src/agents/base.js";
+import { LLMRouter, ModelTier } from "../../src/router.js";
+import { ForgeDb } from "../../src/db.js";
 
 class ConcreteAgent extends BaseAgent {
   async run(): Promise<AgentResult> {

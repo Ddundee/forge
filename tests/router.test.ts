@@ -1,4 +1,4 @@
-import { LLMRouter, ModelTier, DEFAULT_MODELS } from "../src-ts/router.js";
+import { LLMRouter, ModelTier, DEFAULT_MODELS } from "../src/router.js";
 
 jest.mock("ai", () => ({
   generateText: jest.fn(),

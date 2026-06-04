@@ -1,7 +1,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { executeTool } from "../../src-ts/tools/executor.js";
+import { executeTool } from "../../src/tools/executor.js";
 
 let workspace: string;
 beforeEach(() => { workspace = fs.mkdtempSync(path.join(os.tmpdir(), "forge-exec-test-")); });

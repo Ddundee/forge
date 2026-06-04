@@ -1,9 +1,9 @@
-import { IdeationAgent } from "../../src-ts/agents/ideation.js";
-import { ArchitectureAgent } from "../../src-ts/agents/architecture.js";
-import { TaskGraphAgent } from "../../src-ts/agents/taskGraph.js";
-import { ReviewAgent } from "../../src-ts/agents/review.js";
-import { DeployAgent } from "../../src-ts/agents/deploy.js";
-import { ForgeDb } from "../../src-ts/db.js";
+import { IdeationAgent } from "../../src/agents/ideation.js";
+import { ArchitectureAgent } from "../../src/agents/architecture.js";
+import { TaskGraphAgent } from "../../src/agents/taskGraph.js";
+import { ReviewAgent } from "../../src/agents/review.js";
+import { DeployAgent } from "../../src/agents/deploy.js";
+import { ForgeDb } from "../../src/db.js";
 
 function makeRouter(content: string) {
   return {

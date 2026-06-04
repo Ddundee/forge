@@ -1,4 +1,4 @@
-import { fetchModelsForProvider } from "../src-ts/modelFetch.js";
+import { fetchModelsForProvider } from "../src/modelFetch.js";
 
 // Mock fetch — tests verify filtering logic, not live API
 global.fetch = jest.fn();

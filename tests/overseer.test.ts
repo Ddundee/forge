@@ -1,31 +1,31 @@
-import { Overseer } from "../src-ts/overseer.js";
-import { Session } from "../src-ts/session.js";
-import { Phase } from "../src-ts/stateMachine.js";
-import { ForgeDb } from "../src-ts/db.js";
-import { ForgeConfig } from "../src-ts/config.js";
+import { Overseer } from "../src/overseer.js";
+import { Session } from "../src/session.js";
+import { Phase } from "../src/stateMachine.js";
+import { ForgeDb } from "../src/db.js";
+import { ForgeConfig } from "../src/config.js";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
 
 // Mock all agents
-jest.mock("../src-ts/agents/ideation.js");
-jest.mock("../src-ts/agents/architecture.js");
-jest.mock("../src-ts/agents/taskGraph.js");
-jest.mock("../src-ts/agents/coding.js");
-jest.mock("../src-ts/agents/review.js");
-jest.mock("../src-ts/agents/integration.js");
-jest.mock("../src-ts/agents/testAgent.js");
-jest.mock("../src-ts/agents/verification.js");
-jest.mock("../src-ts/agents/deploy.js");
+jest.mock("../src/agents/ideation.js");
+jest.mock("../src/agents/architecture.js");
+jest.mock("../src/agents/taskGraph.js");
+jest.mock("../src/agents/coding.js");
+jest.mock("../src/agents/review.js");
+jest.mock("../src/agents/integration.js");
+jest.mock("../src/agents/testAgent.js");
+jest.mock("../src/agents/verification.js");
+jest.mock("../src/agents/deploy.js");
 
-import { IdeationAgent } from "../src-ts/agents/ideation.js";
-import { ArchitectureAgent } from "../src-ts/agents/architecture.js";
-import { TaskGraphAgent } from "../src-ts/agents/taskGraph.js";
-import { CodingAgent } from "../src-ts/agents/coding.js";
-import { ReviewAgent } from "../src-ts/agents/review.js";
-import { IntegrationAgent } from "../src-ts/agents/integration.js";
-import { TestAgent } from "../src-ts/agents/testAgent.js";
-import { VerificationAgent } from "../src-ts/agents/verification.js";
+import { IdeationAgent } from "../src/agents/ideation.js";
+import { ArchitectureAgent } from "../src/agents/architecture.js";
+import { TaskGraphAgent } from "../src/agents/taskGraph.js";
+import { CodingAgent } from "../src/agents/coding.js";
+import { ReviewAgent } from "../src/agents/review.js";
+import { IntegrationAgent } from "../src/agents/integration.js";
+import { TestAgent } from "../src/agents/testAgent.js";
+import { VerificationAgent } from "../src/agents/verification.js";
 
 const SPEC = JSON.stringify({ name: "todo", description: "d", tech_stack: [], features: [], out_of_scope: [], assumptions: [] });
 const ARCH = JSON.stringify({ stack: { language: "TS" }, structure: [], deploy_platforms: [], test_framework: "jest", verification_method: "cli" });

@@ -1,4 +1,4 @@
-import { ForgeDb } from "../src-ts/db.js";
+import { ForgeDb } from "../src/db.js";
 
 let db: ForgeDb;
 
