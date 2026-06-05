@@ -14,8 +14,18 @@ export interface AgentResult {
   error?: string;
 }
 
+export type EventKind = "llm" | "tool" | "cmd";
+export type LiveEventFn = (kind: EventKind, msg: string) => void;
+
 const MAX_TURNS = 40;
 const MAX_TOOL_CALLS = 80;
+
+function fmtToolArgs(name: string, args: Record<string, unknown>): string {
+  if (name === "bash_exec") return String(args["command"] ?? "").slice(0, 80);
+  const p = args["path"] ?? args["file"] ?? args["directory"];
+  if (p !== undefined) return `${name}(${String(p)})`;
+  return `${name}(${JSON.stringify(args).slice(0, 50)})`;
+}
 
 function extractJson(text: string): string {
   const trimmed = text.trim();
@@ -41,6 +51,7 @@ export abstract class BaseAgent {
     protected router: LLMRouter,
     protected db: ForgeDb,
     protected sessionId: string,
+    protected onLiveEvent?: LiveEventFn,
   ) {}
 
   abstract run(args: Record<string, unknown>): Promise<AgentResult>;
@@ -87,6 +98,7 @@ export abstract class BaseAgent {
   ): Promise<string> {
     const prompt = this.promptFromMessages(messages);
     this.db.logEvent(this.sessionId, "CODEX_CALL", `${this.constructor.name} -> codex`);
+    this.onLiveEvent?.("llm", `${this.constructor.name} → codex`);
     const result = await this.codexDriver.runTask(prompt, workdir);
     this.db.logLlmCall(
       this.sessionId,
@@ -109,6 +121,7 @@ export abstract class BaseAgent {
     const modelOverride = await this.resolveAutoModel();
     const model = modelOverride ?? this.router.modelFor(this.tier);
     this.db.logEvent(this.sessionId, "LLM_CALL", `${this.constructor.name} → ${model}`);
+    this.onLiveEvent?.("llm", `${this.constructor.name} → ${model}`);
     const result = await this.router.complete(this.tier, messages, 120_000, modelOverride);
     this.db.logLlmCall(this.sessionId, { ...result, response: result.content }, taskId);
     return result.content;
@@ -129,6 +142,7 @@ export abstract class BaseAgent {
     for (let turn = 0; turn < MAX_TURNS; turn++) {
       const model = modelOverride ?? this.router.modelFor(this.tier);
       this.db.logEvent(this.sessionId, "LLM_CALL", `${this.constructor.name} turn ${turn + 1} → ${model}`);
+      this.onLiveEvent?.("llm", `${this.constructor.name} turn ${turn + 1} → ${model}`);
       const result = await this.router.completeWithTools(this.tier, messages, TOOL_DEFINITIONS, 120_000, modelOverride);
       this.db.logLlmCall(this.sessionId, { ...result, response: result.text ?? "" }, taskId);
 
@@ -152,6 +166,12 @@ export abstract class BaseAgent {
         const toolResult = totalToolCalls > MAX_TOOL_CALLS
           ? "ERROR: Tool call limit reached. Stop and report what you have."
           : executeTool(tc.name, tc.arguments, workspace);
+
+        if (tc.name === "bash_exec") {
+          this.onLiveEvent?.("cmd", String((tc.arguments as Record<string, unknown>)["command"] ?? "").slice(0, 80));
+        } else {
+          this.onLiveEvent?.("tool", fmtToolArgs(tc.name, tc.arguments as Record<string, unknown>));
+        }
 
         this.db.logToolCall(this.sessionId, taskId, tc.name, tc.arguments, toolResult.slice(0, 2000));
         messages.push({
