@@ -92,14 +92,14 @@ export async function runSetupWizard(): Promise<ForgeConfig> {
 
   console.log("\n⚒  FORGE  —  idea to product in one command\n");
 
-  await select({
+  const priority = await select({
     message: "What matters most to you?",
     choices: [
       { name: "Quality  — best output, higher cost", value: "quality" },
       { name: "Speed    — fastest responses", value: "speed" },
       { name: "Cost     — minimize spend", value: "cost" },
     ],
-  });
+  }) as "quality" | "speed" | "cost";
 
   const providers = await checkbox({
     message: "Which API providers do you have keys for?",
@@ -136,6 +136,26 @@ export async function runSetupWizard(): Promise<ForgeConfig> {
   // Force-refresh catalog so setup always sees the latest models
   const allModelChoices = await fetchAllToolCallModels(selectedProviderIds, true);
 
+  const configMode = await select({
+    message: "Model configuration:",
+    choices: [
+      { name: "Auto   — overseer AI picks the right model for each task", value: "auto" },
+      { name: "Manual — choose a model for each tier yourself", value: "manual" },
+    ],
+  });
+
+  if (configMode === "auto") {
+    const overseer = await select({
+      message: "Pick the overseer model (the AI that will decide all other models):",
+      choices: allModelChoices,
+    }) as string;
+    const cfg = new ForgeConfig("auto", {}, 5, priority, overseer);
+    saveConfig(cfg);
+    if (Object.keys(keys).length) saveKeys(keys);
+    console.log("\n✓ Configuration saved to ~/.forge/config.toml\n");
+    return cfg;
+  }
+
   const chosenModels: Record<string, string> = {};
   if (allModelChoices.length) {
     const tiers: [ModelTier, string][] = [
@@ -152,7 +172,7 @@ export async function runSetupWizard(): Promise<ForgeConfig> {
   const profile = providers.includes("Anthropic (Claude)") ? "claude-primary"
     : providers.includes("OpenAI") ? "openai-primary" : "claude-primary";
 
-  const cfg = new ForgeConfig(profile, chosenModels);
+  const cfg = new ForgeConfig(profile, chosenModels, 5, priority);
   saveConfig(cfg);
   if (Object.keys(keys).length) saveKeys(keys);
   console.log("\n✓ Configuration saved to ~/.forge/config.toml\n");
