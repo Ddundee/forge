@@ -34,6 +34,8 @@ export class ForgeConfig {
     public profile = "claude-primary",
     public models: Record<string, string> = {},
     public maxCycles = 5,
+    public priority: "quality" | "speed" | "cost" = "quality",
+    public autoOverseer = "",
   ) {}
 
   tierModels(): Record<ModelTier, string> {
@@ -54,12 +56,20 @@ export function loadConfig(configFile = CONFIG_FILE): ForgeConfig {
     data.profile ?? "claude-primary",
     data.models ?? {},
     data.max_cycles ?? 5,
+    (data.priority as "quality" | "speed" | "cost") ?? "quality",
+    data.auto_overseer ?? "",
   );
 }
 
 export function saveConfig(cfg: ForgeConfig, configFile = CONFIG_FILE): void {
   fs.mkdirSync(path.dirname(configFile), { recursive: true });
-  fs.writeFileSync(configFile, stringifyToml({ profile: cfg.profile, models: cfg.models, max_cycles: cfg.maxCycles }));
+  fs.writeFileSync(configFile, stringifyToml({
+    profile: cfg.profile,
+    models: cfg.models,
+    max_cycles: cfg.maxCycles,
+    priority: cfg.priority,
+    auto_overseer: cfg.autoOverseer,
+  }));
 }
 
 export function saveKeys(keys: Record<string, string>, keysFile = KEYS_FILE): void {

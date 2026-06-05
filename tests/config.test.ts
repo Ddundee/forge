@@ -48,3 +48,32 @@ test("loadKeys sets env vars from file", () => {
   expect(process.env["TEST_API_KEY_XYZ"]).toBe("secret123");
   delete process.env["TEST_API_KEY_XYZ"];
 });
+
+test("ForgeConfig defaults priority to quality and autoOverseer to empty string", () => {
+  const cfg = new ForgeConfig();
+  expect(cfg.priority).toBe("quality");
+  expect(cfg.autoOverseer).toBe("");
+});
+
+test("ForgeConfig constructor accepts priority and autoOverseer", () => {
+  const cfg = new ForgeConfig("auto", {}, 5, "speed", "claude-opus-4-8");
+  expect(cfg.priority).toBe("speed");
+  expect(cfg.autoOverseer).toBe("claude-opus-4-8");
+});
+
+test("saveConfig and loadConfig round-trips priority and autoOverseer", () => {
+  const configFile = path.join(tmpDir, "config.toml");
+  saveConfig(new ForgeConfig("auto", {}, 5, "speed", "claude-opus-4-8"), configFile);
+  const loaded = loadConfig(configFile);
+  expect(loaded.profile).toBe("auto");
+  expect(loaded.priority).toBe("speed");
+  expect(loaded.autoOverseer).toBe("claude-opus-4-8");
+});
+
+test("loadConfig defaults priority and autoOverseer when fields absent", () => {
+  const configFile = path.join(tmpDir, "config.toml");
+  fs.writeFileSync(configFile, 'profile = "claude-primary"\nmax_cycles = 5\n');
+  const loaded = loadConfig(configFile);
+  expect(loaded.priority).toBe("quality");
+  expect(loaded.autoOverseer).toBe("");
+});
