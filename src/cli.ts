@@ -6,6 +6,25 @@ import { Overseer } from "./overseer.js";
 import { startLiveFeed } from "./ui/liveFeed.js";
 import { Phase } from "./stateMachine.js";
 import { getCatalog } from "./modelsdev.js";
+import type { LiveEventFn } from "./agents/base.js";
+
+function makeHandlers(session: Session, feed: ReturnType<typeof startLiveFeed>) {
+  const onPhaseEvent = (message: string) => {
+    feed.setOverseer(message);
+    feed.pushEvent(session.phase, "phase", message);
+    feed.setCycle(session.cycle);
+    feed.setTotalCost(session.db.getTotalCost(session.id));
+    for (const task of session.db.getTasks(session.id)) {
+      feed.updateTask(String(task["id"]), String(task["title"]), String(task["status"]));
+    }
+  };
+
+  const onAgentEvent: LiveEventFn = (kind, message) => {
+    feed.pushEvent(session.phase, kind, message);
+  };
+
+  return { onPhaseEvent, onAgentEvent };
+}
 
 const program = new Command("forgecli").description("Idea to product in one command.");
 
@@ -19,17 +38,8 @@ program
     const session = Session.create(idea, opts.deploy, undefined, process.cwd(), catalog);
     const feed = startLiveFeed(idea);
 
-    const onEvent = (message: string) => {
-      feed.setOverseer(message);
-      feed.pushEvent(session.phase, message);
-      feed.setCycle(session.cycle);
-      feed.setTotalCost(session.db.getTotalCost(session.id));
-      for (const task of session.db.getTasks(session.id)) {
-        feed.updateTask(String(task["id"]), String(task["title"]), String(task["status"]));
-      }
-    };
-
-    const overseer = new Overseer(session, onEvent);
+    const { onPhaseEvent, onAgentEvent } = makeHandlers(session, feed);
+    const overseer = new Overseer(session, onPhaseEvent, onAgentEvent);
     try {
       await overseer.run();
     } finally {
@@ -71,22 +81,14 @@ program.command("resume [sessionId]").action(async (sessionId?: string) => {
 
   const feed = startLiveFeed(session.idea);
 
-  const onEvent = (message: string) => {
-    feed.setOverseer(message);
-    feed.pushEvent(session.phase, message);
-    feed.setCycle(session.cycle);
-    feed.setTotalCost(session.db.getTotalCost(session.id));
-    for (const task of session.db.getTasks(session.id)) {
-      feed.updateTask(String(task["id"]), String(task["title"]), String(task["status"]));
-    }
-  };
+  const { onPhaseEvent, onAgentEvent } = makeHandlers(session, feed);
 
   // Replay existing tasks into the feed so the pane isn't empty on resume
   for (const task of session.db.getTasks(session.id)) {
     feed.updateTask(String(task["id"]), String(task["title"]), String(task["status"]));
   }
 
-  const overseer = new Overseer(session, onEvent);
+  const overseer = new Overseer(session, onPhaseEvent, onAgentEvent);
   try {
     await overseer.run();
   } finally {
