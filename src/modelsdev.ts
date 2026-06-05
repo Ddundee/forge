@@ -53,7 +53,7 @@ export const SUPPORTED_PROVIDERS = ["anthropic", "openai", "google", "groq", "mi
 // These are the IDs forge exposes in setup; older/experimental variants are hidden.
 export const GENERATION_FILTERS: Record<string, RegExp> = {
   anthropic: /^claude-(opus|sonnet|haiku)-4/,
-  openai:    /^gpt-5\.[45]|^o[34]/,
+  openai:    /^(gpt-5\.[45]|o[34])(?!.*(pro|deep-research))/,
   google:    /^gemini-2\./,
   groq:      /^(llama-3\.3|meta-llama\/llama-4|moonshotai\/kimi-k2|groq\/compound)/,
   mistral:   /^(mistral-(large|medium|small)-latest|codestral-latest|devstral-latest|magistral)/,

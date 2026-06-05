@@ -11,6 +11,14 @@ import { AutoSelector } from "./autoSelector.js";
 
 export const SESSIONS_DIR = path.join(os.homedir(), ".forge", "sessions");
 
+const PROVIDER_ENV_KEYS: Record<string, string> = {
+  anthropic: "ANTHROPIC_API_KEY",
+  openai:    "OPENAI_API_KEY",
+  google:    "GOOGLE_API_KEY",
+  groq:      "GROQ_API_KEY",
+  mistral:   "MISTRAL_API_KEY",
+};
+
 function wireAutoSelector(
   router: LLMRouter,
   cfg: ForgeConfig,
@@ -19,8 +27,9 @@ function wireAutoSelector(
   catalog?: MdCatalog,
 ): void {
   if (cfg.profile !== "auto" || !cfg.autoOverseer || !catalog) return;
-  const available = listToolCallModels(catalog, SUPPORTED_PROVIDERS, true)
-    .map(({ model }) => model.id);
+  const activeProviders = SUPPORTED_PROVIDERS.filter(p => !!process.env[PROVIDER_ENV_KEYS[p]]);
+  const providers = activeProviders.length ? activeProviders : SUPPORTED_PROVIDERS;
+  const available = listToolCallModels(catalog, providers, true).map(({ model }) => model.id);
   const logFn = (msg: string) => db.logEvent(sessionId, "AUTO_SELECT", msg);
   router.setAutoSelector(new AutoSelector(cfg.autoOverseer, cfg.priority, available, logFn));
 }
