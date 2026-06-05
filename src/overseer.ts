@@ -12,17 +12,24 @@ import { IntegrationAgent } from "./agents/integration.js";
 import { TestAgent } from "./agents/testAgent.js";
 import { VerificationAgent } from "./agents/verification.js";
 import { DeployAgent } from "./agents/deploy.js";
+import { LiveEventFn } from "./agents/base.js";
 
 type AskUser = (question: string) => Promise<string | undefined>;
 
 export class Overseer {
   private emit: (msg: string) => void;
+  private liveEvent?: LiveEventFn;
 
-  constructor(private session: Session, eventCallback?: (msg: string) => void) {
+  constructor(
+    private session: Session,
+    eventCallback?: (msg: string) => void,
+    liveEvent?: LiveEventFn,
+  ) {
     this.emit = (msg) => {
       this.session.db.logEvent(this.session.id, this.session.phase, msg);
       eventCallback?.(msg);
     };
+    this.liveEvent = liveEvent;
   }
 
   async run(askUser?: AskUser): Promise<void> {
@@ -32,7 +39,7 @@ export class Overseer {
   }
 
   private agent<T>(Cls: new (...args: any[]) => T): T {
-    return new Cls(this.session.router, this.session.db, this.session.id);
+    return new Cls(this.session.router, this.session.db, this.session.id, this.liveEvent);
   }
 
   private spec(): string { return String(this.session.db.getSession(this.session.id)?.["spec"] ?? "{}"); }

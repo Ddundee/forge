@@ -4,6 +4,7 @@ import { Phase } from "../src/stateMachine.js";
 import { ForgeDb } from "../src/db.js";
 import { ForgeConfig } from "../src/config.js";
 import { LLMRouter, ModelTier } from "../src/router.js";
+import { LiveEventFn } from "../src/agents/base.js";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -125,6 +126,15 @@ test("reaches FAILED when max_cycles exceeded", async () => {
   const overseer = new Overseer(session);
   await overseer.run();
   expect(session.phase).toBe(Phase.FAILED);
+});
+
+test("Overseer accepts liveEvent as third constructor argument", () => {
+  const liveEvents: Array<{ kind: string; msg: string }> = [];
+  const liveEventFn: LiveEventFn = (kind, msg) => liveEvents.push({ kind, msg });
+  const session = makeSession();
+  // Constructing with a liveEvent arg should not throw and should store it
+  const overseer = new Overseer(session, undefined, liveEventFn);
+  expect((overseer as any).liveEvent).toBe(liveEventFn);
 });
 
 test("coding phase gives each task an isolated workspace subdir when codex profile active", async () => {
