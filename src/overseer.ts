@@ -1,5 +1,8 @@
+import * as fs from "fs";
+import * as path from "path";
 import { Session } from "./session.js";
 import { Phase } from "./stateMachine.js";
+import { ModelTier } from "./router.js";
 import { IdeationAgent } from "./agents/ideation.js";
 import { ArchitectureAgent } from "./agents/architecture.js";
 import { TaskGraphAgent } from "./agents/taskGraph.js";
@@ -100,20 +103,38 @@ export class Overseer {
     const pending = this.session.db.getTasks(this.session.id, "pending");
     if (!pending.length) { this.session.advancePhase(Phase.INTEGRATION); return; }
     this.emit(`Coding ${pending.length} tasks in parallel…`);
-    await Promise.all(pending.map(t => this.codeTask(t)));
+
+    const useIsolation = this.session.router.modelFor(ModelTier.REASONING) === "codex";
+    const tasksDir = path.join(this.session.workspace, "tasks");
+    if (useIsolation) {
+      try {
+        await Promise.all(pending.map(t => {
+          const taskWorkspace = path.join(tasksDir, String(t["id"]));
+          fs.mkdirSync(taskWorkspace, { recursive: true });
+          return this.codeTask(t, taskWorkspace);
+        }));
+        this.mergeTaskDirs(tasksDir, this.session.workspace);
+      } finally {
+        fs.rmSync(tasksDir, { recursive: true, force: true });
+      }
+    } else {
+      await Promise.all(pending.map(t => this.codeTask(t)));
+    }
+
     const done = this.session.db.getTasks(this.session.id, "completed").length;
     this.emit(`Coding complete — ${done} tasks done`);
     this.session.advancePhase(Phase.INTEGRATION);
   }
 
-  private async codeTask(task: Record<string, unknown>): Promise<void> {
+  private async codeTask(task: Record<string, unknown>, workspaceOverride?: string): Promise<void> {
     const id = String(task["id"]);
     const title = String(task["title"]);
+    const workspace = workspaceOverride ?? this.session.workspace;
     this.emit(`Coding: ${title}`);
     this.session.db.updateTask(id, { status: "in_progress" });
     const result = await this.agent(CodingAgent).run({
       taskTitle: title, spec: this.spec(), architecture: this.arch(),
-      workspace: this.session.workspace, taskId: id,
+      workspace, taskId: id,
     });
     this.session.db.updateTask(id, { status: result.success ? "completed" : "failed", output: result.output });
     this.emit(`${result.success ? "✓" : "✗"} ${title}`);
@@ -172,5 +193,29 @@ export class Overseer {
     const result = await this.agent(DeployAgent).run({ workspace: this.session.workspace, architecture: this.arch(), target: this.session.deployTarget ?? "none" });
     this.emit(`Deploy: ${result.success ? "live" : "failed"} — ${result.output.slice(0, 80)}`);
     this.session.advancePhase(Phase.DONE);
+  }
+
+  private mergeTaskDirs(tasksDir: string, dst: string): void {
+    if (!fs.existsSync(tasksDir)) return;
+    for (const taskId of fs.readdirSync(tasksDir)) {
+      const taskDir = path.join(tasksDir, taskId);
+      if (!fs.statSync(taskDir).isDirectory()) continue;
+      this.copyDir(taskDir, dst);
+    }
+  }
+
+  private copyDir(src: string, dst: string): void {
+    for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+      if (entry.name.startsWith(".")) continue;
+      const srcPath = path.join(src, entry.name);
+      const dstPath = path.join(dst, entry.name);
+      if (entry.isDirectory()) {
+        fs.mkdirSync(dstPath, { recursive: true });
+        this.copyDir(srcPath, dstPath);
+      } else {
+        fs.mkdirSync(path.dirname(dstPath), { recursive: true });
+        fs.copyFileSync(srcPath, dstPath);
+      }
+    }
   }
 }

@@ -3,6 +3,7 @@ import { Session } from "../src/session.js";
 import { Phase } from "../src/stateMachine.js";
 import { ForgeDb } from "../src/db.js";
 import { ForgeConfig } from "../src/config.js";
+import { LLMRouter, ModelTier } from "../src/router.js";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
@@ -41,7 +42,29 @@ function makeSession(): Session {
   const sessionId = db.createSession("todo app");
   const ws = path.join(tmpDir, "workspace");
   fs.mkdirSync(ws, { recursive: true });
-  return new Session(sessionId, "todo app", Phase.IDEATION, 0, 5, undefined, ws, db, {} as any, new ForgeConfig());
+  const mockRouter = {
+    modelFor: jest.fn().mockReturnValue("claude-haiku"),
+    hasAutoSelector: jest.fn().mockReturnValue(false),
+    complete: jest.fn(),
+    completeWithTools: jest.fn(),
+  } as unknown as LLMRouter;
+  return new Session(sessionId, "todo app", Phase.IDEATION, 0, 5, undefined, ws, db, mockRouter, new ForgeConfig());
+}
+
+function makeCodexSession(): Session {
+  const db = new ForgeDb(":memory:");
+  const sessionId = db.createSession("codex idea");
+  const ws = path.join(tmpDir, "codex-workspace");
+  fs.mkdirSync(ws, { recursive: true });
+  const mockRouter = {
+    modelFor: jest.fn().mockImplementation((tier: string) =>
+      tier === ModelTier.REASONING ? "codex" : "claude-haiku"
+    ),
+    hasAutoSelector: jest.fn().mockReturnValue(false),
+    complete: jest.fn(),
+    completeWithTools: jest.fn(),
+  } as unknown as LLMRouter;
+  return new Session(sessionId, "codex idea", Phase.IDEATION, 0, 5, undefined, ws, db, mockRouter, new ForgeConfig("codex"));
 }
 
 beforeEach(() => {
@@ -102,4 +125,27 @@ test("reaches FAILED when max_cycles exceeded", async () => {
   const overseer = new Overseer(session);
   await overseer.run();
   expect(session.phase).toBe(Phase.FAILED);
+});
+
+test("coding phase gives each task an isolated workspace subdir when codex profile active", async () => {
+  const receivedWorkspaces: string[] = [];
+
+  (CodingAgent as jest.Mock).mockImplementation(() => ({
+    run: jest.fn().mockImplementation(async (args: Record<string, unknown>) => {
+      const workspace = String(args["workspace"]);
+      receivedWorkspaces.push(workspace);
+      fs.writeFileSync(path.join(workspace, "output.ts"), "// generated");
+      return { success: true, output: "wrote files" };
+    }),
+  }));
+
+  const session = makeCodexSession();
+  const overseer = new Overseer(session);
+  await overseer.run();
+
+  for (const ws of receivedWorkspaces) {
+    expect(ws).toContain(path.join(session.workspace, "tasks"));
+  }
+  expect(fs.existsSync(path.join(session.workspace, "output.ts"))).toBe(true);
+  expect(fs.existsSync(path.join(session.workspace, "tasks"))).toBe(false);
 });
