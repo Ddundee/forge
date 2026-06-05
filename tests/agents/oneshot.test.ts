@@ -9,6 +9,7 @@ function makeRouter(content: string) {
   return {
     modelFor: jest.fn().mockReturnValue("claude-haiku"),
     override: jest.fn(),
+    hasAutoSelector: jest.fn().mockReturnValue(false),
     complete: jest.fn().mockResolvedValue({ content, model: "m", tokensIn: 1, tokensOut: 1, costUsd: 0 }),
     completeWithTools: jest.fn(),
   } as any;

@@ -40,10 +40,21 @@ export abstract class BaseAgent {
 
   abstract run(args: Record<string, unknown>): Promise<AgentResult>;
 
+  private getRecentContext(): string {
+    const events = this.db.getEvents(this.sessionId);
+    return events.slice(-10).map(e => String(e["message"])).join(" | ").slice(-500);
+  }
+
+  protected async resolveAutoModel(): Promise<string | undefined> {
+    if (!this.router.hasAutoSelector()) return undefined;
+    return this.router.selectForAgent(this.constructor.name, this.getRecentContext());
+  }
+
   protected async call(messages: CoreMessage[], taskId?: string): Promise<string> {
-    const model = this.router.modelFor(this.tier);
+    const modelOverride = await this.resolveAutoModel();
+    const model = modelOverride ?? this.router.modelFor(this.tier);
     this.db.logEvent(this.sessionId, "LLM_CALL", `${this.constructor.name} → ${model}`);
-    const result = await this.router.complete(this.tier, messages);
+    const result = await this.router.complete(this.tier, messages, 120_000, modelOverride);
     this.db.logLlmCall(this.sessionId, { ...result, response: result.content }, taskId);
     return result.content;
   }
@@ -53,12 +64,13 @@ export abstract class BaseAgent {
     workspace: string,
     taskId?: string,
   ): Promise<string> {
+    const modelOverride = await this.resolveAutoModel();
     let totalToolCalls = 0;
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {
-      const model = this.router.modelFor(this.tier);
+      const model = modelOverride ?? this.router.modelFor(this.tier);
       this.db.logEvent(this.sessionId, "LLM_CALL", `${this.constructor.name} turn ${turn + 1} → ${model}`);
-      const result = await this.router.completeWithTools(this.tier, messages, TOOL_DEFINITIONS);
+      const result = await this.router.completeWithTools(this.tier, messages, TOOL_DEFINITIONS, 120_000, modelOverride);
       this.db.logLlmCall(this.sessionId, { ...result, response: result.text ?? "" }, taskId);
 
       if (!result.toolCalls.length) return result.text ?? "";
@@ -91,7 +103,7 @@ export abstract class BaseAgent {
     }
 
     messages.push({ role: "user", content: "You have reached the turn limit. Summarize what you completed." });
-    const final = await this.router.completeWithTools(this.tier, messages, {});
+    const final = await this.router.completeWithTools(this.tier, messages, {}, 120_000, modelOverride);
     this.db.logLlmCall(this.sessionId, { ...final, response: final.text ?? "" }, taskId);
     return final.text ?? "";
   }

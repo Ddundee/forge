@@ -19,6 +19,7 @@ beforeEach(() => {
   mockRouter = {
     modelFor: jest.fn().mockReturnValue("claude-haiku"),
     override: jest.fn(),
+    hasAutoSelector: jest.fn().mockReturnValue(false),
     complete: jest.fn().mockResolvedValue({ content: "test response", model: "claude-haiku", tokensIn: 10, tokensOut: 5, costUsd: 0.001 }),
     completeWithTools: jest.fn(),
   } as any;

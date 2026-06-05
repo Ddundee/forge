@@ -22,6 +22,7 @@ function makeRouter(text: string | null, toolCalls: any[] = []) {
   return {
     modelFor: jest.fn().mockReturnValue("claude-sonnet"),
     override: jest.fn(),
+    hasAutoSelector: jest.fn().mockReturnValue(false),
     complete: jest.fn(),
     completeWithTools: jest.fn().mockResolvedValue({ text, toolCalls, model: "m", tokensIn: 1, tokensOut: 1, costUsd: 0 }),
   } as any;
