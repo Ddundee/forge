@@ -21,7 +21,6 @@ const MAX_TURNS = 40;
 const MAX_TOOL_CALLS = 80;
 
 function fmtToolArgs(name: string, args: Record<string, unknown>): string {
-  if (name === "bash_exec") return String(args["command"] ?? "").slice(0, 80);
   const p = args["path"] ?? args["file"] ?? args["directory"];
   if (p !== undefined) return `${name}(${String(p)})`;
   return `${name}(${JSON.stringify(args).slice(0, 50)})`;
@@ -168,9 +167,9 @@ export abstract class BaseAgent {
           : executeTool(tc.name, tc.arguments, workspace);
 
         if (tc.name === "bash_exec") {
-          this.onLiveEvent?.("cmd", String((tc.arguments as Record<string, unknown>)["command"] ?? "").slice(0, 80));
+          this.onLiveEvent?.("cmd", String(tc.arguments["command"] ?? "").slice(0, 80));
         } else {
-          this.onLiveEvent?.("tool", fmtToolArgs(tc.name, tc.arguments as Record<string, unknown>));
+          this.onLiveEvent?.("tool", fmtToolArgs(tc.name, tc.arguments));
         }
 
         this.db.logToolCall(this.sessionId, taskId, tc.name, tc.arguments, toolResult.slice(0, 2000));
