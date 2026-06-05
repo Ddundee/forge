@@ -6,10 +6,24 @@ import { ForgeDb } from "./db.js";
 import { LLMRouter } from "./router.js";
 import { ForgeConfig, loadConfig } from "./config.js";
 import { Phase, transition } from "./stateMachine.js";
-import { type MdCatalog } from "./modelsdev.js";
+import { type MdCatalog, listToolCallModels, SUPPORTED_PROVIDERS } from "./modelsdev.js";
+import { AutoSelector } from "./autoSelector.js";
 
 export const SESSIONS_DIR = path.join(os.homedir(), ".forge", "sessions");
 
+function wireAutoSelector(
+  router: LLMRouter,
+  cfg: ForgeConfig,
+  db: ForgeDb,
+  sessionId: string,
+  catalog?: MdCatalog,
+): void {
+  if (cfg.profile !== "auto" || !cfg.autoOverseer || !catalog) return;
+  const available = listToolCallModels(catalog, SUPPORTED_PROVIDERS, true)
+    .map(({ model }) => model.id);
+  const logFn = (msg: string) => db.logEvent(sessionId, "AUTO_SELECT", msg);
+  router.setAutoSelector(new AutoSelector(cfg.autoOverseer, cfg.priority, available, logFn));
+}
 
 export class Session {
   constructor(
@@ -36,10 +50,12 @@ export class Session {
     db.createSession(idea, id);
     db.updateSession(id, { workspace: resolvedWorkspace });
     if (deployTarget) db.updateSession(id, { deploy_target: deployTarget });
+    const router = new LLMRouter(cfg.tierModels(), catalog);
+    wireAutoSelector(router, cfg, db, id, catalog);
     return new Session(
       id, idea, Phase.IDEATION, 0, cfg.maxCycles, deployTarget,
       resolvedWorkspace,
-      db, new LLMRouter(cfg.tierModels(), catalog), cfg,
+      db, router, cfg,
     );
   }
 
@@ -53,12 +69,14 @@ export class Session {
     const workspace = row["workspace"]
       ? String(row["workspace"])
       : path.join(sessionDir, "workspace");
+    const router = new LLMRouter(cfg.tierModels(), catalog);
+    wireAutoSelector(router, cfg, db, sessionId, catalog);
     return new Session(
       sessionId, String(row["idea"]), row["phase"] as Phase,
       Number(row["cycle"]), Number(row["max_cycles"]),
       row["deploy_target"] as string | undefined,
       workspace,
-      db, new LLMRouter(cfg.tierModels(), catalog), cfg,
+      db, router, cfg,
     );
   }
 
