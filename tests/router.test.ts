@@ -61,3 +61,45 @@ test("completeWithTools normalises toolCalls", async () => {
   expect(result.toolCalls).toHaveLength(1);
   expect(result.toolCalls[0]).toEqual({ id: "tc1", name: "bash_exec", arguments: { command: "ls" } });
 });
+
+test("hasAutoSelector returns false by default", () => {
+  const router = new LLMRouter();
+  expect(router.hasAutoSelector()).toBe(false);
+});
+
+test("hasAutoSelector returns true after setAutoSelector", () => {
+  const router = new LLMRouter();
+  router.setAutoSelector({ selectModel: jest.fn() } as any);
+  expect(router.hasAutoSelector()).toBe(true);
+});
+
+test("selectForAgent delegates to autoSelector.selectModel", async () => {
+  const mockSelector = { selectModel: jest.fn().mockResolvedValue("gpt-4o") };
+  const router = new LLMRouter();
+  router.setAutoSelector(mockSelector as any);
+  const result = await router.selectForAgent("CodingAgent", "some context");
+  expect(result).toBe("gpt-4o");
+  expect(mockSelector.selectModel).toHaveBeenCalledWith("CodingAgent", "some context");
+});
+
+test("complete uses modelOverride instead of tier model when provided", async () => {
+  mockGenerateText.mockResolvedValue({
+    text: "response",
+    usage: { promptTokens: 5, completionTokens: 3, totalTokens: 8 },
+    toolCalls: [],
+  } as any);
+  const router = new LLMRouter();
+  const result = await router.complete(ModelTier.FAST, [], 120_000, "claude-sonnet-4-6");
+  expect(result.model).toBe("claude-sonnet-4-6");
+});
+
+test("completeWithTools uses modelOverride when provided", async () => {
+  mockGenerateText.mockResolvedValue({
+    text: null,
+    usage: { promptTokens: 5, completionTokens: 3, totalTokens: 8 },
+    toolCalls: [],
+  } as any);
+  const router = new LLMRouter();
+  const result = await router.completeWithTools(ModelTier.FAST, [], {} as any, 120_000, "gpt-4o");
+  expect(result.model).toBe("gpt-4o");
+});

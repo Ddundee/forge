@@ -3,6 +3,7 @@ import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { type MdCatalog, findModel, calcCost } from "./modelsdev.js";
+import type { AutoSelector } from "./autoSelector.js";
 
 export enum ModelTier {
   OVERSEER = "overseer",
@@ -51,6 +52,7 @@ export class LLMTimeoutError extends Error {
 export class LLMRouter {
   private models: Record<ModelTier, string>;
   private catalog: MdCatalog | null;
+  private autoSelector?: AutoSelector;
 
   constructor(tierModels?: Partial<Record<ModelTier, string>>, catalog?: MdCatalog) {
     this.models = { ...DEFAULT_MODELS, ...tierModels };
@@ -65,8 +67,20 @@ export class LLMRouter {
     this.models[tier] = model;
   }
 
-  async complete(tier: ModelTier, messages: CoreMessage[], timeoutMs = 120_000): Promise<CallResult> {
-    const modelId = this.models[tier];
+  setAutoSelector(selector: AutoSelector): void {
+    this.autoSelector = selector;
+  }
+
+  hasAutoSelector(): boolean {
+    return !!this.autoSelector;
+  }
+
+  async selectForAgent(agentName: string, recentContext: string): Promise<string> {
+    return this.autoSelector!.selectModel(agentName, recentContext);
+  }
+
+  async complete(tier: ModelTier, messages: CoreMessage[], timeoutMs = 120_000, modelOverride?: string): Promise<CallResult> {
+    const modelId = modelOverride ?? this.models[tier];
     const model = this.resolveModel(modelId);
     const call = generateText({ model, messages });
     const timeout = new Promise<never>((_, reject) =>
@@ -88,8 +102,9 @@ export class LLMRouter {
     messages: CoreMessage[],
     tools: Record<string, unknown>,
     timeoutMs = 120_000,
+    modelOverride?: string,
   ): Promise<LoopResult> {
-    const modelId = this.models[tier];
+    const modelId = modelOverride ?? this.models[tier];
     const model = this.resolveModel(modelId);
     const call = generateText({ model, messages, tools: tools as any, toolChoice: "auto" });
     const timeout = new Promise<never>((_, reject) =>
