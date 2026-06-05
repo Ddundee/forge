@@ -1,8 +1,12 @@
 import type { CoreMessage } from "ai";
+import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
 import { ForgeDb } from "../db.js";
 import { LLMRouter, ModelTier } from "../router.js";
 import { TOOL_DEFINITIONS } from "../tools/definitions.js";
 import { executeTool } from "../tools/executor.js";
+import { CodexDriver } from "../codexDriver.js";
 
 export interface AgentResult {
   success: boolean;
@@ -31,6 +35,7 @@ function extractJson(text: string): string {
 
 export abstract class BaseAgent {
   protected tier: ModelTier = ModelTier.STANDARD;
+  private codexDriver = new CodexDriver();
 
   constructor(
     protected router: LLMRouter,
@@ -50,7 +55,57 @@ export abstract class BaseAgent {
     return this.router.selectForAgent(this.constructor.name, this.getRecentContext());
   }
 
+  protected isCodexMode(): boolean {
+    return this.router.modelFor(this.tier) === "codex";
+  }
+
+  private messageContentToText(content: CoreMessage["content"]): string {
+    if (typeof content === "string") return content;
+    try {
+      return JSON.stringify(content);
+    } catch {
+      return String(content);
+    }
+  }
+
+  private promptFromMessages(messages: CoreMessage[]): string {
+    const system = messages
+      .filter((m) => m.role === "system")
+      .map((m) => this.messageContentToText(m.content))
+      .join("\n\n");
+    const body = messages
+      .filter((m) => m.role !== "system")
+      .map((m) => `${m.role.toUpperCase()}:\n${this.messageContentToText(m.content)}`)
+      .join("\n\n");
+    return system ? `${system}\n\n---\n\n${body}` : body;
+  }
+
+  private async runViaCodex(
+    messages: CoreMessage[],
+    workdir: string,
+    taskId?: string,
+  ): Promise<string> {
+    const prompt = this.promptFromMessages(messages);
+    this.db.logEvent(this.sessionId, "CODEX_CALL", `${this.constructor.name} -> codex`);
+    const result = await this.codexDriver.runTask(prompt, workdir);
+    this.db.logLlmCall(
+      this.sessionId,
+      { model: "codex", tokensIn: 0, tokensOut: 0, costUsd: 0, response: result },
+      taskId,
+    );
+    return result;
+  }
+
   protected async call(messages: CoreMessage[], taskId?: string): Promise<string> {
+    if (this.isCodexMode()) {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "forge-codex-"));
+      try {
+        return await this.runViaCodex(messages, tmpDir, taskId);
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
+    }
+
     const modelOverride = await this.resolveAutoModel();
     const model = modelOverride ?? this.router.modelFor(this.tier);
     this.db.logEvent(this.sessionId, "LLM_CALL", `${this.constructor.name} → ${model}`);
@@ -64,6 +119,10 @@ export abstract class BaseAgent {
     workspace: string,
     taskId?: string,
   ): Promise<string> {
+    if (this.isCodexMode()) {
+      return this.runViaCodex(messages, workspace, taskId);
+    }
+
     const modelOverride = await this.resolveAutoModel();
     let totalToolCalls = 0;
 

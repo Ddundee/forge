@@ -16,6 +16,22 @@ export class DeployAgent extends BaseAgent {
     const workspace = String(args["workspace"] ?? "");
     const cmd = DEPLOY_CMDS[target];
     if (!cmd) return { success: false, output: "", error: `Unknown deploy target: ${target}` };
+
+    if (this.isCodexMode()) {
+      const messages: any[] = [
+        {
+          role: "system",
+          content: "You are a release engineer. Deploy the project from the workspace using the requested target. Run the necessary CLI command, inspect failures, fix only deployment-blocking issues, and summarize the result.",
+        },
+        {
+          role: "user",
+          content: `Deploy target: ${target}\nSuggested command: ${cmd.join(" ")}\nArchitecture:\n${args["architecture"]}\n\nWorkspace root: ${workspace}`,
+        },
+      ];
+      const output = await this.runAgenticLoop(messages, workspace);
+      return { success: true, output: output || `Deploy attempted for ${target}` };
+    }
+
     try {
       const output = execSync(cmd.join(" "), { cwd: workspace, encoding: "utf8", stdio: "pipe" });
       return { success: true, output };

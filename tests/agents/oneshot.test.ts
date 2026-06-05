@@ -5,12 +5,28 @@ import { ReviewAgent } from "../../src/agents/review.js";
 import { DeployAgent } from "../../src/agents/deploy.js";
 import { ForgeDb } from "../../src/db.js";
 
+jest.mock("../../src/codexDriver.js", () => ({
+  CodexDriver: jest.fn().mockImplementation(() => ({
+    runTask: jest.fn().mockResolvedValue("codex output"),
+  })),
+}));
+
 function makeRouter(content: string) {
   return {
     modelFor: jest.fn().mockReturnValue("claude-haiku"),
     override: jest.fn(),
     hasAutoSelector: jest.fn().mockReturnValue(false),
     complete: jest.fn().mockResolvedValue({ content, model: "m", tokensIn: 1, tokensOut: 1, costUsd: 0 }),
+    completeWithTools: jest.fn(),
+  } as any;
+}
+
+function makeCodexRouter() {
+  return {
+    modelFor: jest.fn().mockReturnValue("codex"),
+    override: jest.fn(),
+    hasAutoSelector: jest.fn().mockReturnValue(false),
+    complete: jest.fn(),
     completeWithTools: jest.fn(),
   } as any;
 }
@@ -69,4 +85,13 @@ test("DeployAgent returns error for unknown target", async () => {
   const result = await agent.run({ workspace: "/tmp", architecture: "{}", target: "unknown" });
   expect(result.success).toBe(false);
   expect(result.error).toContain("Unknown deploy target");
+});
+
+test("DeployAgent routes valid deploy targets through CodexDriver in codex mode", async () => {
+  const router = makeCodexRouter();
+  const agent = new DeployAgent(router, db, sessionId);
+  const result = await agent.run({ workspace: "/tmp", architecture: "{}", target: "vercel" });
+  expect(result.success).toBe(true);
+  expect(result.output).toBe("codex output");
+  expect(router.completeWithTools).not.toHaveBeenCalled();
 });
