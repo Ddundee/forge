@@ -11,7 +11,7 @@ export class CodexDriver {
     fs.mkdirSync(workdir, { recursive: true });
 
     let taskArg: string;
-    if (prompt.length > 8_000) {
+    if (prompt.length > 8_192) {
       const taskFile = path.join(workdir, ".forge-task.md");
       fs.writeFileSync(taskFile, prompt, "utf8");
       taskArg = `Read the file .forge-task.md and follow its instructions exactly. Delete the file when done.`;
