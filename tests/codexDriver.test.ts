@@ -36,13 +36,13 @@ test("runTask resolves with stdout on exit 0", async () => {
   expect(result).toBe("codex output");
 });
 
-test("runTask spawns codex with --approval-mode full-auto and cwd", async () => {
+test("runTask spawns codex exec with --dangerously-bypass-approvals-and-sandbox and cwd", async () => {
   mockSpawn.mockReturnValueOnce(makeChild("ok", 0));
   const driver = new CodexDriver();
   await driver.runTask("my task", tmpDir);
   expect(mockSpawn).toHaveBeenCalledWith(
     "codex",
-    ["--approval-mode", "full-auto", "my task"],
+    ["exec", "--dangerously-bypass-approvals-and-sandbox", "my task"],
     expect.objectContaining({ cwd: tmpDir }),
   );
 });

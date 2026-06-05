@@ -22,7 +22,7 @@ export class CodexDriver {
     return new Promise((resolve, reject) => {
       const child = spawn(
         "codex",
-        ["--approval-mode", "full-auto", taskArg],
+        ["exec", "--dangerously-bypass-approvals-and-sandbox", taskArg],
         { cwd: workdir, env: process.env, stdio: ["ignore", "pipe", "pipe"] },
       );
 
