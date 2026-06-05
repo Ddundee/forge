@@ -53,3 +53,14 @@ test("handle methods do not throw", () => {
   expect(() => handle.setTotalCost(0.05)).not.toThrow();
   expect(() => handle.stop()).not.toThrow();
 });
+
+test("pushEvent caps log buffer at 500 entries without throwing", () => {
+  const handle = startLiveFeed("idea");
+  expect(() => {
+    for (let i = 0; i < 501; i++) {
+      handle.pushEvent("CODING", "llm", `event ${i}`);
+    }
+  }).not.toThrow();
+  // Handle still usable after buffer cap
+  expect(() => handle.pushEvent("CODING", "phase", "still works")).not.toThrow();
+});
