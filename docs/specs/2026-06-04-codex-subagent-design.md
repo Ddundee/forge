@@ -118,7 +118,7 @@ if (this.isCodexMode()) {
 // existing body unchanged
 ```
 
-Implementation agents (coding, integration, testing, verification) use `runAgenticLoop()` and pass their real workspace — codex writes files there directly using its own agentic loop.
+Implementation agents (coding, integration, testing, verification, deploy) use `runAgenticLoop()` and pass their real workspace — codex writes files there directly using its own agentic loop.
 
 ### `src/overseer.ts` changes
 
