@@ -128,6 +128,11 @@ export class LLMRouter {
   }
 
   private resolveModel(modelId: string) {
+    if (modelId === "codex") {
+      throw new Error(
+        'Model id "codex" reached LLMRouter - use CodexDriver via BaseAgent',
+      );
+    }
     if (modelId.startsWith("claude")) return createAnthropic()(modelId);
     if (modelId.startsWith("gpt") || modelId.startsWith("o3") || modelId.startsWith("o4")) {
       return createOpenAI()(modelId);

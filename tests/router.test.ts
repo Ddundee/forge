@@ -103,3 +103,10 @@ test("completeWithTools uses modelOverride when provided", async () => {
   const result = await router.completeWithTools(ModelTier.FAST, [], {} as any, 120_000, "gpt-4o");
   expect(result.model).toBe("gpt-4o");
 });
+
+test("resolveModel throws a clear error if 'codex' model id reaches it", () => {
+  const router = new LLMRouter({ [ModelTier.FAST]: "codex" });
+  return expect(
+    router.complete(ModelTier.FAST, [{ role: "user", content: "hi" }]),
+  ).rejects.toThrow('Model id "codex" reached LLMRouter');
+});
