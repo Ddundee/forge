@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { render, Box, Text, useStdout } from "ink";
 
+export type LogKind = "phase" | "llm" | "tool" | "cmd";
+
 interface Task { id: string; title: string; status: string; }
-interface LogLine { ts: number; phase: string; text: string; }
+interface LogLine { ts: number; phase: string; kind: LogKind; text: string; }
 
 interface FeedRef {
   idea: string;
@@ -15,11 +17,34 @@ interface FeedRef {
   startTime: number;
 }
 
+const LOG_BUFFER_MAX = 500;
+
 const PHASE_COLOR: Record<string, string> = {
   IDEATION: "magenta", ARCHITECTURE: "blue", TASK_GRAPH: "yellow",
   CODING: "cyan", INTEGRATION: "green", TESTING: "yellowBright",
   VERIFICATION: "greenBright", DEPLOY: "blue", DONE: "green", FAILED: "red",
 };
+
+const KIND_COLOR: Record<LogKind, string> = {
+  phase: "white",
+  llm: "magenta",
+  tool: "yellow",
+  cmd: "cyan",
+};
+
+const KIND_ICON: Record<LogKind, string> = {
+  phase: " ",
+  llm: "◈",
+  tool: "⚙",
+  cmd: "$",
+};
+
+function logLabel(kind: LogKind, phase: string): string {
+  if (kind === "llm") return "LLM    ";
+  if (kind === "cmd") return "CMD    ";
+  if (kind === "tool") return "TOOL   ";
+  return phase.slice(0, 7).padEnd(7, " ");
+}
 
 function fmtElapsed(secs: number) {
   const m = Math.floor(secs / 60).toString().padStart(2, "0");
@@ -123,13 +148,15 @@ const TUI: React.FC<{ r: FeedRef }> = ({ r }) => {
         <Box flexDirection="column" width={rightW}>
           <Text bold color="yellow">{" "}Logs</Text>
           {visibleLogs.map((l, i) => {
-            const maxText = rightW - 20;
+            const maxText = rightW - 22;
             const text = l.text.length > maxText ? l.text.slice(0, maxText - 1) + "…" : l.text;
-            const pc = (PHASE_COLOR[l.phase] ?? "white") as any;
+            const color = (l.kind === "phase" ? (PHASE_COLOR[l.phase] ?? "white") : KIND_COLOR[l.kind]) as any;
+            const label = logLabel(l.kind, l.phase);
+            const icon = KIND_ICON[l.kind];
             return (
               <Box key={i}>
                 <Text color="dim"> {fmtElapsed(l.ts)} </Text>
-                <Text color={pc}>{l.phase.slice(0, 7).padEnd(7, " ")} </Text>
+                <Text color={color}>{icon}{label} </Text>
                 <Text>{text}</Text>
               </Box>
             );
@@ -153,7 +180,7 @@ const TUI: React.FC<{ r: FeedRef }> = ({ r }) => {
 export interface LiveFeedHandle {
   setOverseer(message: string): void;
   updateTask(id: string, title: string, status: string): void;
-  pushEvent(phase: string, message: string): void;
+  pushEvent(phase: string, kind: LogKind, message: string): void;
   setCycle(n: number): void;
   setTotalCost(cost: number): void;
   stop(): void;
@@ -182,9 +209,12 @@ export function startLiveFeed(idea: string): LiveFeedHandle {
       else r.tasks = [...r.tasks, { id, title, status }];
     },
 
-    pushEvent(phase, message) {
+    pushEvent(phase, kind, message) {
       r.phase = phase;
-      r.logs = [...r.logs, { ts: (Date.now() - startTime) / 1000, phase, text: message }];
+      const entry: LogLine = { ts: (Date.now() - startTime) / 1000, phase, kind, text: message };
+      r.logs = r.logs.length >= LOG_BUFFER_MAX
+        ? [...r.logs.slice(1), entry]
+        : [...r.logs, entry];
     },
 
     setCycle(n) { r.cycle = n; },
