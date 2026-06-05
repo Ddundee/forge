@@ -86,6 +86,24 @@ test("TaskGraphAgent returns task array", async () => {
   expect(JSON.parse(result.output)).toHaveLength(1);
 });
 
+test("TaskGraphAgent accepts wrapped tasks arrays", async () => {
+  const tasks = JSON.stringify({ tasks: [{ name: "Setup project", dependencies: "Install dependencies" }] });
+  const agent = new TaskGraphAgent(makeRouter(tasks), db, sessionId);
+  const result = await agent.run({ spec: "{}", architecture: "{}" });
+  expect(result.success).toBe(true);
+  expect(JSON.parse(result.output)).toEqual([
+    { title: "Setup project", type: "coding", deps: ["Install dependencies"] },
+  ]);
+});
+
+test("TaskGraphAgent rejects tasks without titles before database insertion", async () => {
+  const tasks = JSON.stringify([{ type: "coding", deps: [] }]);
+  const agent = new TaskGraphAgent(makeRouter(tasks), db, sessionId);
+  const result = await agent.run({ spec: "{}", architecture: "{}" });
+  expect(result.success).toBe(false);
+  expect(result.error).toContain("missing a title");
+});
+
 // ReviewAgent
 test("ReviewAgent returns structured review", async () => {
   const review = JSON.stringify({ approved: true, issues: [], suggestions: [] });

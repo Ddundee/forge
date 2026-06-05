@@ -1,5 +1,6 @@
 import { BaseAgent, AgentResult } from "./base.js";
 import { ModelTier } from "../router.js";
+import { normalizeTaskGraph } from "../taskGraphValidation.js";
 
 const SYSTEM = `You are a senior engineer breaking a product into coding tasks.
 
@@ -24,11 +25,17 @@ export class TaskGraphAgent extends BaseAgent {
       { role: "user", content: `Spec:\n${args["spec"]}\n\nArchitecture:\n${args["architecture"]}` },
     ];
     const response = await this.call(messages);
+    let parsed: unknown;
     try {
-      const tasks = JSON.parse(this.extractJson(response));
-      return { success: true, output: JSON.stringify(tasks) };
+      parsed = JSON.parse(this.extractJson(response));
     } catch {
       return { success: false, output: response, error: "invalid_json" };
+    }
+    try {
+      const tasks = normalizeTaskGraph(parsed);
+      return { success: true, output: JSON.stringify(tasks) };
+    } catch (e: any) {
+      return { success: false, output: response, error: e.message ?? "invalid_task_graph" };
     }
   }
 }

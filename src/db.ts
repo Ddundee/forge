@@ -67,6 +67,22 @@ CREATE TABLE IF NOT EXISTS tool_calls (
 
 function uid(): string { return randomUUID().slice(0, 8); }
 function now(): string { return new Date().toISOString(); }
+function bindValue(value: unknown): any {
+  if (value === undefined || value === null) return null;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === "boolean") return value ? 1 : 0;
+  if (typeof value === "string" || typeof value === "number" || typeof value === "bigint") return value;
+  if (value instanceof Uint8Array) return value;
+  return JSON.stringify(value) ?? String(value);
+}
+
+function bindValues(values: unknown[]): any[] {
+  return values.map(bindValue);
+}
+
+function jsonValue(value: unknown): string {
+  return JSON.stringify(value ?? null);
+}
 
 export class ForgeDb {
   private db: DatabaseSync;
@@ -80,7 +96,7 @@ export class ForgeDb {
     const sessionId = id ?? uid();
     this.db.prepare(
       "INSERT INTO sessions (id, idea, phase, cycle, created_at, config_json) VALUES (?, ?, 'IDEATION', 0, ?, ?)"
-    ).run(sessionId, idea, now(), configJson);
+    ).run(...bindValues([sessionId, idea, now(), configJson]));
     return sessionId;
   }
 
@@ -90,7 +106,7 @@ export class ForgeDb {
 
   updateSession(sessionId: string, fields: Record<string, unknown>): void {
     const sets = Object.keys(fields).map(k => `${k} = ?`).join(", ");
-    const params = [...Object.values(fields), sessionId] as any[];
+    const params = bindValues([...Object.values(fields), sessionId]);
     this.db.prepare(`UPDATE sessions SET ${sets} WHERE id = ?`).run(...params);
   }
 
@@ -113,14 +129,14 @@ export class ForgeDb {
     const id = uid();
     this.db.prepare(
       "INSERT INTO tasks (id, session_id, title, type, status, deps_json, created_at) VALUES (?, ?, ?, ?, 'pending', ?, ?)"
-    ).run(id, sessionId, title, type, JSON.stringify(deps), now());
+    ).run(...bindValues([id, sessionId, title, type, jsonValue(deps), now()]));
     return id;
   }
 
   updateTask(taskId: string, fields: Record<string, unknown>): void {
     if (fields["status"] === "completed") fields["completed_at"] = now();
     const sets = Object.keys(fields).map(k => `${k} = ?`).join(", ");
-    const params = [...Object.values(fields), taskId] as any[];
+    const params = bindValues([...Object.values(fields), taskId]);
     this.db.prepare(`UPDATE tasks SET ${sets} WHERE id = ?`).run(...params);
   }
 
@@ -138,7 +154,7 @@ export class ForgeDb {
   logEvent(sessionId: string, phase: string, message: string): void {
     this.db.prepare(
       "INSERT INTO events (id, session_id, timestamp, phase, message) VALUES (?, ?, ?, ?, ?)"
-    ).run(uid(), sessionId, now(), phase, message);
+    ).run(...bindValues([uid(), sessionId, now(), phase, message]));
   }
 
   logLlmCall(
@@ -148,14 +164,14 @@ export class ForgeDb {
   ): void {
     this.db.prepare(
       "INSERT INTO llm_calls (id, task_id, session_id, provider, model, tokens_in, tokens_out, cost_usd, response, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run(uid(), taskId ?? null, sessionId, data.model.split("/")[0], data.model,
-      data.tokensIn, data.tokensOut, data.costUsd, data.response, now());
+    ).run(...bindValues([uid(), taskId ?? null, sessionId, data.model.split("/")[0], data.model,
+      data.tokensIn, data.tokensOut, data.costUsd, data.response, now()]));
   }
 
   logToolCall(sessionId: string, taskId: string | undefined, toolName: string, toolArgs: unknown, toolResult: string): void {
     this.db.prepare(
       "INSERT INTO tool_calls (id, session_id, task_id, tool_name, tool_args, tool_result, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    ).run(uid(), sessionId, taskId ?? null, toolName, JSON.stringify(toolArgs), toolResult, now());
+    ).run(...bindValues([uid(), sessionId, taskId ?? null, toolName, jsonValue(toolArgs), toolResult, now()]));
   }
 
   saveArtifact(sessionId: string, filePath: string, content: string): void {
@@ -165,7 +181,7 @@ export class ForgeDb {
     const version = existing ? existing.version + 1 : 1;
     this.db.prepare(
       "INSERT INTO artifacts (id, session_id, file_path, content_snapshot, version, created_at) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(uid(), sessionId, filePath, content, version, now());
+    ).run(...bindValues([uid(), sessionId, filePath, content, version, now()]));
   }
 
   getArtifacts(sessionId: string): Record<string, unknown>[] {

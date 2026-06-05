@@ -124,6 +124,15 @@ test("verification failure loops back to CODING then DONE", async () => {
   expect(session.cycle).toBe(1);
 });
 
+test("task graph phase rejects tasks missing titles before writing to sqlite", async () => {
+  (TaskGraphAgent as jest.Mock).mockImplementation(() => ({
+    run: jest.fn().mockResolvedValue({ success: true, output: JSON.stringify([{ type: "coding", deps: [] }]) }),
+  }));
+  const session = makeSession();
+  const overseer = new Overseer(session);
+  await expect(overseer.run()).rejects.toThrow("missing a title");
+});
+
 test("emits events throughout pipeline", async () => {
   const events: string[] = [];
   const session = makeSession();

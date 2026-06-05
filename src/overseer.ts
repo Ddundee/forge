@@ -14,6 +14,7 @@ import { VerificationAgent } from "./agents/verification.js";
 import { DeployAgent } from "./agents/deploy.js";
 import { LiveEventFn } from "./agents/base.js";
 import { externalAgentFor } from "./externalAgents.js";
+import { normalizeTaskGraph } from "./taskGraphValidation.js";
 
 type AskUser = (question: string) => Promise<string | undefined>;
 
@@ -99,10 +100,15 @@ export class Overseer {
   private async taskGraph(): Promise<void> {
     this.emit("Building task dependency graph…");
     const result = await this.agent(TaskGraphAgent).run({ spec: this.spec(), architecture: this.arch() });
-    if (result.success) {
-      const tasks = JSON.parse(result.output) as { title: string; type: string; deps?: string[] }[];
+    if (!result.success) {
+      throw new Error(`Task graph failed: ${result.error ?? "invalid response"}`);
+    }
+    try {
+      const tasks = normalizeTaskGraph(JSON.parse(result.output));
       for (const t of tasks) this.session.db.createTask(this.session.id, t.title, t.type, t.deps);
-      this.emit(`Task graph ready — ${tasks.length} tasks planned`);
+      this.emit(`Task graph ready - ${tasks.length} tasks planned`);
+    } catch (e: any) {
+      throw new Error(`Task graph failed: ${e.message ?? "invalid task graph"}`);
     }
     this.session.advancePhase(Phase.CODING);
   }

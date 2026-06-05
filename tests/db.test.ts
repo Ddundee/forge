@@ -26,6 +26,13 @@ test("updateSession persists fields", () => {
   expect(row?.["cycle"]).toBe(1);
 });
 
+test("updateSession converts undefined values to null before binding", () => {
+  const id = db.createSession("idea");
+  expect(() => db.updateSession(id, { deploy_target: undefined })).not.toThrow();
+  const row = db.getSession(id);
+  expect(row?.["deploy_target"]).toBeNull();
+});
+
 test("createTask returns ID and appears in getTasks", () => {
   const sid = db.createSession("idea");
   db.createTask(sid, "Write auth", "coding");
@@ -49,6 +56,14 @@ test("updateTask sets completed_at when status is completed", () => {
   db.updateTask(tid, { status: "completed" });
   const tasks = db.getTasks(sid);
   expect(tasks[0]["completed_at"]).toBeTruthy();
+});
+
+test("updateTask converts undefined values to null before binding", () => {
+  const sid = db.createSession("idea");
+  const tid = db.createTask(sid, "task", "coding");
+  expect(() => db.updateTask(tid, { output: undefined })).not.toThrow();
+  const tasks = db.getTasks(sid);
+  expect(tasks[0]["output"]).toBeNull();
 });
 
 test("logEvent is retrievable", () => {
