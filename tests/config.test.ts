@@ -77,3 +77,16 @@ test("loadConfig defaults priority and autoOverseer when fields absent", () => {
   expect(loaded.priority).toBe("quality");
   expect(loaded.autoOverseer).toBe("");
 });
+
+test("codex profile maps all tiers to 'codex'", () => {
+  const cfg = new ForgeConfig("codex");
+  const models = cfg.tierModels();
+  expect(models[ModelTier.OVERSEER]).toBe("codex");
+  expect(models[ModelTier.REASONING]).toBe("codex");
+  expect(models[ModelTier.STANDARD]).toBe("codex");
+  expect(models[ModelTier.FAST]).toBe("codex");
+});
+
+test("PROVIDER_PROFILES contains codex key", () => {
+  expect(PROVIDER_PROFILES).toHaveProperty("codex");
+});

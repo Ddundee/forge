@@ -27,6 +27,12 @@ export const PROVIDER_PROFILES: Record<string, Record<ModelTier, string>> = {
     [ModelTier.STANDARD]: "gemini/gemini-2.0-flash",
     [ModelTier.FAST]: "gemini/gemini-2.0-flash",
   },
+  "codex": {
+    [ModelTier.OVERSEER]: "codex",
+    [ModelTier.REASONING]: "codex",
+    [ModelTier.STANDARD]: "codex",
+    [ModelTier.FAST]: "codex",
+  },
 };
 
 export class ForgeConfig {
@@ -103,8 +109,29 @@ export async function runSetupWizard(): Promise<ForgeConfig> {
 
   const providers = await checkbox({
     message: "Which API providers do you have keys for?",
-    choices: ["Anthropic (Claude)", "OpenAI", "Google (Gemini)", "Groq", "Mistral"].map(n => ({ name: n, value: n })),
+    choices: [
+      "Anthropic (Claude)",
+      "OpenAI",
+      "Google (Gemini)",
+      "Groq",
+      "Mistral",
+      "Codex CLI  (OpenAI Pro subscription - no API key needed)",
+    ].map(n => ({ name: n, value: n })),
   });
+
+  if (providers.includes("Codex CLI  (OpenAI Pro subscription - no API key needed)")) {
+    const { checkCodexInstalled } = await import("./codexDriver.js");
+    const installed = await checkCodexInstalled();
+    if (!installed) {
+      console.log("\nX  codex CLI not found. Install it with:\n\n    npm install -g @openai/codex\n");
+      process.exit(1);
+    }
+    console.log("\nOK  codex CLI detected - no API key needed\n");
+    const cfg = new ForgeConfig("codex", {}, 5, priority);
+    saveConfig(cfg);
+    console.log("OK  Configuration saved to ~/.forge/config.toml\n");
+    return cfg;
+  }
 
   const PROVIDER_KEY_MAP: Record<string, [string, string]> = {
     "Anthropic (Claude)": ["ANTHROPIC_API_KEY", "Anthropic API key"],
