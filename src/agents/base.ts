@@ -7,6 +7,13 @@ import { LLMRouter, ModelTier } from "../router.js";
 import { TOOL_DEFINITIONS } from "../tools/definitions.js";
 import { executeTool } from "../tools/executor.js";
 import { CodexDriver } from "../codexDriver.js";
+import { ClaudeCodeDriver } from "../claudeCodeDriver.js";
+import {
+  type ExternalAgentId,
+  externalAgentEventPhase,
+  externalAgentFor,
+  externalAgentLabel,
+} from "../externalAgents.js";
 
 export interface AgentResult {
   success: boolean;
@@ -45,6 +52,7 @@ function extractJson(text: string): string {
 export abstract class BaseAgent {
   protected tier: ModelTier = ModelTier.STANDARD;
   private codexDriver = new CodexDriver();
+  private claudeCodeDriver = new ClaudeCodeDriver();
 
   constructor(
     protected router: LLMRouter,
@@ -65,8 +73,8 @@ export abstract class BaseAgent {
     return this.router.selectForAgent(this.constructor.name, this.getRecentContext());
   }
 
-  protected isCodexMode(): boolean {
-    return this.router.modelFor(this.tier) === "codex";
+  protected externalAgentMode(): ExternalAgentId | undefined {
+    return externalAgentFor(this.router.modelFor(this.tier));
   }
 
   private messageContentToText(content: CoreMessage["content"]): string {
@@ -90,28 +98,33 @@ export abstract class BaseAgent {
     return system ? `${system}\n\n---\n\n${body}` : body;
   }
 
-  private async runViaCodex(
+  private async runViaExternalAgent(
+    id: ExternalAgentId,
     messages: CoreMessage[],
     workdir: string,
     taskId?: string,
   ): Promise<string> {
     const prompt = this.promptFromMessages(messages);
-    this.db.logEvent(this.sessionId, "CODEX_CALL", `${this.constructor.name} -> codex`);
-    this.onLiveEvent?.("llm", `${this.constructor.name} → codex`);
-    const result = await this.codexDriver.runTask(prompt, workdir);
+    const label = externalAgentLabel(id);
+    this.db.logEvent(this.sessionId, externalAgentEventPhase(id), `${this.constructor.name} -> ${label}`);
+    this.onLiveEvent?.("llm", `${this.constructor.name} → ${label}`);
+    const result = id === "codex"
+      ? await this.codexDriver.runTask(prompt, workdir)
+      : await this.claudeCodeDriver.runTask(prompt, workdir);
     this.db.logLlmCall(
       this.sessionId,
-      { model: "codex", tokensIn: 0, tokensOut: 0, costUsd: 0, response: result },
+      { model: label, tokensIn: 0, tokensOut: 0, costUsd: 0, response: result },
       taskId,
     );
     return result;
   }
 
   protected async call(messages: CoreMessage[], taskId?: string): Promise<string> {
-    if (this.isCodexMode()) {
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "forge-codex-"));
+    const externalAgent = this.externalAgentMode();
+    if (externalAgent) {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `forge-${externalAgent}-`));
       try {
-        return await this.runViaCodex(messages, tmpDir, taskId);
+        return await this.runViaExternalAgent(externalAgent, messages, tmpDir, taskId);
       } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });
       }
@@ -131,8 +144,9 @@ export abstract class BaseAgent {
     workspace: string,
     taskId?: string,
   ): Promise<string> {
-    if (this.isCodexMode()) {
-      return this.runViaCodex(messages, workspace, taskId);
+    const externalAgent = this.externalAgentMode();
+    if (externalAgent) {
+      return this.runViaExternalAgent(externalAgent, messages, workspace, taskId);
     }
 
     const modelOverride = await this.resolveAutoModel();

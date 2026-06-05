@@ -33,6 +33,12 @@ export const PROVIDER_PROFILES: Record<string, Record<ModelTier, string>> = {
     [ModelTier.STANDARD]: "codex",
     [ModelTier.FAST]: "codex",
   },
+  "claude-code": {
+    [ModelTier.OVERSEER]: "claude-code",
+    [ModelTier.REASONING]: "claude-code",
+    [ModelTier.STANDARD]: "claude-code",
+    [ModelTier.FAST]: "claude-code",
+  },
 };
 
 export class ForgeConfig {
@@ -107,19 +113,25 @@ export async function runSetupWizard(): Promise<ForgeConfig> {
     ],
   }) as "quality" | "speed" | "cost";
 
+  const codexCliLabel = "Codex CLI  (OpenAI Pro subscription - no API key needed)";
+  const claudeCodeCliLabel = "Claude Code CLI (Claude subscription / Agent SDK credits - no Forge API key)";
+
   const providers = await checkbox({
-    message: "Which API providers do you have keys for?",
+    message: "Which API providers or local CLI agents do you want to use?",
     choices: [
       "Anthropic (Claude)",
       "OpenAI",
       "Google (Gemini)",
       "Groq",
       "Mistral",
-      "Codex CLI  (OpenAI Pro subscription - no API key needed)",
+      codexCliLabel,
+      claudeCodeCliLabel,
     ].map(n => ({ name: n, value: n })),
   });
 
-  if (providers.includes("Codex CLI  (OpenAI Pro subscription - no API key needed)")) {
+  const selectedExternalProfiles: string[] = [];
+
+  if (providers.includes(codexCliLabel)) {
     const { checkCodexInstalled } = await import("./codexDriver.js");
     const installed = await checkCodexInstalled();
     if (!installed) {
@@ -127,7 +139,35 @@ export async function runSetupWizard(): Promise<ForgeConfig> {
       process.exit(1);
     }
     console.log("\nOK  codex CLI detected - no API key needed\n");
-    const cfg = new ForgeConfig("codex", {}, 5, priority);
+    selectedExternalProfiles.push("codex");
+  }
+
+  if (providers.includes(claudeCodeCliLabel)) {
+    const { checkClaudeCodeReady, claudeCodeInstallGuidance } = await import("./claudeCodeDriver.js");
+    const status = await checkClaudeCodeReady();
+    if (!status.installed) {
+      console.log(`\nX  ${claudeCodeInstallGuidance().replace(/\n/g, "\n    ")}\n`);
+      process.exit(1);
+    }
+    if (!status.authenticated) {
+      console.log("\nX  claude CLI is installed but not authenticated. Run:\n\n    claude auth login\n");
+      process.exit(1);
+    }
+    console.log("\nOK  Claude Code CLI detected and authenticated - no Forge API key needed\n");
+    selectedExternalProfiles.push("claude-code");
+  }
+
+  if (selectedExternalProfiles.length) {
+    const profile = selectedExternalProfiles.length === 1
+      ? selectedExternalProfiles[0]
+      : await select({
+        message: "Which local CLI agent should Forge use?",
+        choices: [
+          { name: "Codex CLI", value: "codex" },
+          { name: "Claude Code CLI", value: "claude-code" },
+        ],
+      }) as string;
+    const cfg = new ForgeConfig(profile, {}, 5, priority);
     saveConfig(cfg);
     console.log("OK  Configuration saved to ~/.forge/config.toml\n");
     return cfg;

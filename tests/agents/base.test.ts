@@ -11,6 +11,12 @@ jest.mock("../../src/codexDriver.js", () => ({
   })),
 }));
 
+jest.mock("../../src/claudeCodeDriver.js", () => ({
+  ClaudeCodeDriver: jest.fn().mockImplementation(() => ({
+    runTask: jest.fn().mockResolvedValue("claude code output"),
+  })),
+}));
+
 class ConcreteAgent extends BaseAgent {
   constructor(router: any, db: any, sessionId: string, onLiveEvent?: any) {
     super(router, db, sessionId, onLiveEvent);
@@ -84,12 +90,28 @@ test("call routes to CodexDriver when model tier resolves to 'codex'", async () 
   expect(mockRouter.complete).not.toHaveBeenCalled();
 });
 
+test("call routes to ClaudeCodeDriver when model tier resolves to 'claude-code'", async () => {
+  mockRouter.modelFor.mockReturnValue("claude-code");
+  const agent = new ConcreteAgent(mockRouter, db, sessionId);
+  const result = await agent.run();
+  expect(result.output).toBe("claude code output");
+  expect(mockRouter.complete).not.toHaveBeenCalled();
+});
+
 test("call logs CODEX_CALL event when in codex mode", async () => {
   mockRouter.modelFor.mockReturnValue("codex");
   const agent = new ConcreteAgent(mockRouter, db, sessionId);
   await agent.run();
   const events = db.getEvents(sessionId);
   expect(events.some((e) => String(e["phase"]) === "CODEX_CALL")).toBe(true);
+});
+
+test("call logs CLAUDE_CODE_CALL event when in claude-code mode", async () => {
+  mockRouter.modelFor.mockReturnValue("claude-code");
+  const agent = new ConcreteAgent(mockRouter, db, sessionId);
+  await agent.run();
+  const events = db.getEvents(sessionId);
+  expect(events.some((e) => String(e["phase"]) === "CLAUDE_CODE_CALL")).toBe(true);
 });
 
 test("runAgenticLoop routes to CodexDriver when model is codex", async () => {
@@ -99,6 +121,19 @@ test("runAgenticLoop routes to CodexDriver when model is codex", async () => {
     const agent = new LoopAgent(mockRouter, db, sessionId);
     const result = await agent.run({ workspace: tmpWs });
     expect(result.output).toBe("codex output");
+    expect(mockRouter.completeWithTools).not.toHaveBeenCalled();
+  } finally {
+    fs.rmSync(tmpWs, { recursive: true, force: true });
+  }
+});
+
+test("runAgenticLoop routes to ClaudeCodeDriver when model is claude-code", async () => {
+  mockRouter.modelFor.mockReturnValue("claude-code");
+  const tmpWs = fs.mkdtempSync(path.join(os.tmpdir(), "forge-test-ws-"));
+  try {
+    const agent = new LoopAgent(mockRouter, db, sessionId);
+    const result = await agent.run({ workspace: tmpWs });
+    expect(result.output).toBe("claude code output");
     expect(mockRouter.completeWithTools).not.toHaveBeenCalled();
   } finally {
     fs.rmSync(tmpWs, { recursive: true, force: true });
@@ -130,6 +165,16 @@ test("call fires onLiveEvent with kind 'llm' when model is codex", async () => {
   const llmEvents = events.filter(e => e.kind === "llm");
   expect(llmEvents.length).toBeGreaterThanOrEqual(1);
   expect(llmEvents[0].msg).toContain("codex");
+});
+
+test("call fires onLiveEvent with kind 'llm' when model is claude-code", async () => {
+  mockRouter.modelFor.mockReturnValue("claude-code");
+  const events: Array<{ kind: string; msg: string }> = [];
+  const agent = new ConcreteAgent(mockRouter, db, sessionId, (kind: string, msg: string) => events.push({ kind, msg }));
+  await agent.run();
+  const llmEvents = events.filter(e => e.kind === "llm");
+  expect(llmEvents.length).toBeGreaterThanOrEqual(1);
+  expect(llmEvents[0].msg).toContain("claude-code");
 });
 
 test("runAgenticLoop fires 'cmd' event for bash_exec tool calls", async () => {

@@ -87,6 +87,19 @@ test("codex profile maps all tiers to 'codex'", () => {
   expect(models[ModelTier.FAST]).toBe("codex");
 });
 
+test("claude-code profile maps all tiers to 'claude-code'", () => {
+  const cfg = new ForgeConfig("claude-code");
+  const models = cfg.tierModels();
+  expect(models[ModelTier.OVERSEER]).toBe("claude-code");
+  expect(models[ModelTier.REASONING]).toBe("claude-code");
+  expect(models[ModelTier.STANDARD]).toBe("claude-code");
+  expect(models[ModelTier.FAST]).toBe("claude-code");
+});
+
 test("PROVIDER_PROFILES contains codex key", () => {
   expect(PROVIDER_PROFILES).toHaveProperty("codex");
+});
+
+test("PROVIDER_PROFILES contains claude-code key", () => {
+  expect(PROVIDER_PROFILES).toHaveProperty("claude-code");
 });

@@ -4,6 +4,7 @@ import { createOpenAI } from "@ai-sdk/openai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { type MdCatalog, findModel, calcCost } from "./modelsdev.js";
 import type { AutoSelector } from "./autoSelector.js";
+import { externalAgentFor } from "./externalAgents.js";
 
 export enum ModelTier {
   OVERSEER = "overseer",
@@ -128,9 +129,9 @@ export class LLMRouter {
   }
 
   private resolveModel(modelId: string) {
-    if (modelId === "codex") {
+    if (externalAgentFor(modelId)) {
       throw new Error(
-        'Model id "codex" reached LLMRouter - use CodexDriver via BaseAgent',
+        `Model id "${modelId}" reached LLMRouter - use an external agent driver via BaseAgent`,
       );
     }
     if (modelId.startsWith("claude")) return createAnthropic()(modelId);

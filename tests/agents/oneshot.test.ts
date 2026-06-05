@@ -11,6 +11,12 @@ jest.mock("../../src/codexDriver.js", () => ({
   })),
 }));
 
+jest.mock("../../src/claudeCodeDriver.js", () => ({
+  ClaudeCodeDriver: jest.fn().mockImplementation(() => ({
+    runTask: jest.fn().mockResolvedValue("claude code output"),
+  })),
+}));
+
 function makeRouter(content: string) {
   return {
     modelFor: jest.fn().mockReturnValue("claude-haiku"),
@@ -24,6 +30,16 @@ function makeRouter(content: string) {
 function makeCodexRouter() {
   return {
     modelFor: jest.fn().mockReturnValue("codex"),
+    override: jest.fn(),
+    hasAutoSelector: jest.fn().mockReturnValue(false),
+    complete: jest.fn(),
+    completeWithTools: jest.fn(),
+  } as any;
+}
+
+function makeClaudeCodeRouter() {
+  return {
+    modelFor: jest.fn().mockReturnValue("claude-code"),
     override: jest.fn(),
     hasAutoSelector: jest.fn().mockReturnValue(false),
     complete: jest.fn(),
@@ -93,5 +109,14 @@ test("DeployAgent routes valid deploy targets through CodexDriver in codex mode"
   const result = await agent.run({ workspace: "/tmp", architecture: "{}", target: "vercel" });
   expect(result.success).toBe(true);
   expect(result.output).toBe("codex output");
+  expect(router.completeWithTools).not.toHaveBeenCalled();
+});
+
+test("DeployAgent routes valid deploy targets through ClaudeCodeDriver in claude-code mode", async () => {
+  const router = makeClaudeCodeRouter();
+  const agent = new DeployAgent(router, db, sessionId);
+  const result = await agent.run({ workspace: "/tmp", architecture: "{}", target: "vercel" });
+  expect(result.success).toBe(true);
+  expect(result.output).toBe("claude code output");
   expect(router.completeWithTools).not.toHaveBeenCalled();
 });

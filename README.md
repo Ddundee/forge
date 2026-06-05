@@ -98,13 +98,27 @@ forgecli setup
 The interactive wizard:
 
 1. **Priority** — quality, speed, or cost (sets smart model defaults)
-2. **Providers** — pick which APIs you have keys for (Anthropic, OpenAI, Google, Groq, Mistral)
-3. **API keys** — entered securely per provider, saved to `~/.forge/keys.env` (mode 600)
-4. **Model selection** — fetches the live model list from each provider's API, then lets you pick a model for each of the four tiers with arrow keys
+2. **Providers or local agents** — pick API providers or a local CLI agent profile
+3. **API keys** — for API providers, entered securely and saved to `~/.forge/keys.env` (mode 600)
+4. **Model selection** — for API providers, fetches the live model list and lets you pick a model for each tier
 
 Keys are loaded automatically before every build — no need to export environment variables manually.
 
-**Supported providers:** Anthropic (Claude), OpenAI, Google (Gemini), Groq, and Mistral.
+**Supported API providers:** Anthropic (Claude), OpenAI, Google (Gemini), Groq, and Mistral.
+
+**Supported local CLI agents:**
+
+| Profile | Requirement | Notes |
+|---|---|---|
+| `codex` | `codex` CLI installed | Uses an OpenAI Pro subscription; no Forge API key needed |
+| `claude-code` | `claude` CLI installed and `claude auth status` passing | Uses Claude Code programmatically via `claude -p`; no Forge API key needed |
+
+Claude Code can be tuned with:
+
+| Env var | Default | Meaning |
+|---|---|---|
+| `FORGE_CLAUDE_CODE_PERMISSION_MODE` | `auto` | Passed to `claude -p --permission-mode` |
+| `FORGE_CLAUDE_CODE_MAX_TURNS` | `40` | Passed to `claude -p --max-turns` |
 
 ### Manual config
 
@@ -128,6 +142,8 @@ fast      = "gemini/gemini-2.0-flash"
 | `claude-primary` | claude-opus-4-8 | claude-sonnet-4-6 | claude-haiku | claude-haiku |
 | `openai-primary` | gpt-4o | o3-mini | gpt-4o-mini | gpt-4o-mini |
 | `mixed-cost-optimized` | claude-sonnet-4-6 | claude-sonnet-4-6 | gemini-flash | gemini-flash |
+| `codex` | codex | codex | codex | codex |
+| `claude-code` | claude-code | claude-code | claude-code | claude-code |
 
 **Model tiers:**
 

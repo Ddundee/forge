@@ -17,7 +17,7 @@ export class DeployAgent extends BaseAgent {
     const cmd = DEPLOY_CMDS[target];
     if (!cmd) return { success: false, output: "", error: `Unknown deploy target: ${target}` };
 
-    if (this.isCodexMode()) {
+    if (this.externalAgentMode()) {
       const messages: any[] = [
         {
           role: "system",

@@ -110,3 +110,10 @@ test("resolveModel throws a clear error if 'codex' model id reaches it", () => {
     router.complete(ModelTier.FAST, [{ role: "user", content: "hi" }]),
   ).rejects.toThrow('Model id "codex" reached LLMRouter');
 });
+
+test("resolveModel throws a clear error if 'claude-code' model id reaches it", () => {
+  const router = new LLMRouter({ [ModelTier.FAST]: "claude-code" });
+  return expect(
+    router.complete(ModelTier.FAST, [{ role: "user", content: "hi" }]),
+  ).rejects.toThrow('Model id "claude-code" reached LLMRouter');
+});

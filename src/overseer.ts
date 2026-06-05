@@ -13,6 +13,7 @@ import { TestAgent } from "./agents/testAgent.js";
 import { VerificationAgent } from "./agents/verification.js";
 import { DeployAgent } from "./agents/deploy.js";
 import { LiveEventFn } from "./agents/base.js";
+import { externalAgentFor } from "./externalAgents.js";
 
 type AskUser = (question: string) => Promise<string | undefined>;
 
@@ -111,7 +112,8 @@ export class Overseer {
     if (!pending.length) { this.session.advancePhase(Phase.INTEGRATION); return; }
     this.emit(`Coding ${pending.length} tasks in parallel…`);
 
-    const useIsolation = this.session.router.modelFor(ModelTier.REASONING) === "codex";
+    const useIsolation =
+      externalAgentFor(this.session.router.modelFor(ModelTier.REASONING)) !== undefined;
     const tasksDir = path.join(this.session.workspace, "tasks");
     if (useIsolation) {
       if (fs.existsSync(tasksDir)) fs.rmSync(tasksDir, { recursive: true, force: true });

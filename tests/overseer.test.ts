@@ -68,6 +68,22 @@ function makeCodexSession(): Session {
   return new Session(sessionId, "codex idea", Phase.IDEATION, 0, 5, undefined, ws, db, mockRouter, new ForgeConfig("codex"));
 }
 
+function makeClaudeCodeSession(): Session {
+  const db = new ForgeDb(":memory:");
+  const sessionId = db.createSession("claude code idea");
+  const ws = path.join(tmpDir, "claude-code-workspace");
+  fs.mkdirSync(ws, { recursive: true });
+  const mockRouter = {
+    modelFor: jest.fn().mockImplementation((tier: string) =>
+      tier === ModelTier.REASONING ? "claude-code" : "claude-haiku"
+    ),
+    hasAutoSelector: jest.fn().mockReturnValue(false),
+    complete: jest.fn(),
+    completeWithTools: jest.fn(),
+  } as unknown as LLMRouter;
+  return new Session(sessionId, "claude code idea", Phase.IDEATION, 0, 5, undefined, ws, db, mockRouter, new ForgeConfig("claude-code"));
+}
+
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "forge-overseer-test-"));
   jest.clearAllMocks();
@@ -150,6 +166,29 @@ test("coding phase gives each task an isolated workspace subdir when codex profi
   }));
 
   const session = makeCodexSession();
+  const overseer = new Overseer(session);
+  await overseer.run();
+
+  for (const ws of receivedWorkspaces) {
+    expect(ws).toContain(path.join(session.workspace, "tasks"));
+  }
+  expect(fs.existsSync(path.join(session.workspace, "output.ts"))).toBe(true);
+  expect(fs.existsSync(path.join(session.workspace, "tasks"))).toBe(false);
+});
+
+test("coding phase gives each task an isolated workspace subdir when claude-code profile active", async () => {
+  const receivedWorkspaces: string[] = [];
+
+  (CodingAgent as jest.Mock).mockImplementation(() => ({
+    run: jest.fn().mockImplementation(async (args: Record<string, unknown>) => {
+      const workspace = String(args["workspace"]);
+      receivedWorkspaces.push(workspace);
+      fs.writeFileSync(path.join(workspace, "output.ts"), "// generated");
+      return { success: true, output: "wrote files" };
+    }),
+  }));
+
+  const session = makeClaudeCodeSession();
   const overseer = new Overseer(session);
   await overseer.run();
 
