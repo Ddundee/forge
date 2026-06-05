@@ -114,6 +114,7 @@ export class Overseer {
     const useIsolation = this.session.router.modelFor(ModelTier.REASONING) === "codex";
     const tasksDir = path.join(this.session.workspace, "tasks");
     if (useIsolation) {
+      if (fs.existsSync(tasksDir)) fs.rmSync(tasksDir, { recursive: true, force: true });
       try {
         await Promise.all(pending.map(t => {
           const taskWorkspace = path.join(tasksDir, String(t["id"]));
