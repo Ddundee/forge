@@ -88,6 +88,16 @@ test("runTask returns parsed JSON result when present", async () => {
   expect(result).toBe("claude output");
 });
 
+test("runTask returns parsed result from Claude JSON arrays", async () => {
+  mockSpawn.mockReturnValueOnce(makeChild(JSON.stringify([
+    { type: "system" },
+    { type: "result", result: "array result" },
+  ]), 0));
+  const driver = new ClaudeCodeDriver();
+  const result = await driver.runTask("do a thing", tmpDir);
+  expect(result).toBe("array result");
+});
+
 test("runTask returns raw stdout when JSON result is absent", async () => {
   const stdout = JSON.stringify({ message: "no result" });
   mockSpawn.mockReturnValueOnce(makeChild(stdout, 0));
@@ -108,6 +118,29 @@ test("runTask rejects on non-zero exit code", async () => {
   mockSpawn.mockReturnValueOnce(child);
   const driver = new ClaudeCodeDriver();
   await expect(driver.runTask("task", tmpDir)).rejects.toThrow("claude exited 1");
+});
+
+test("runTask includes stdout result when claude exits non-zero with empty stderr", async () => {
+  mockSpawn.mockReturnValueOnce(makeChild(JSON.stringify({ result: "rate limit exceeded" }), 1));
+  const driver = new ClaudeCodeDriver();
+  await expect(driver.runTask("task", tmpDir)).rejects.toThrow("rate limit exceeded");
+});
+
+test("runTask gives auth guidance when claude stdout reports not logged in", async () => {
+  mockSpawn.mockReturnValueOnce(makeChild(JSON.stringify([
+    {
+      type: "assistant",
+      message: { content: [{ type: "text", text: "Not logged in · Please run /login" }] },
+      error: "authentication_failed",
+    },
+    {
+      type: "result",
+      is_error: true,
+      result: "Not logged in · Please run /login",
+    },
+  ]), 1));
+  const driver = new ClaudeCodeDriver();
+  await expect(driver.runTask("task", tmpDir)).rejects.toThrow("claude auth login");
 });
 
 test("runTask rejects with install guidance when claude CLI is missing", async () => {

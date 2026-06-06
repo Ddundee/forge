@@ -10,12 +10,45 @@ const INSTALL_GUIDANCE = [
 
 function resultFromStdout(stdout: string): string {
   try {
-    const parsed = JSON.parse(stdout.trim()) as { result?: unknown };
-    if (Object.prototype.hasOwnProperty.call(parsed, "result")) {
-      return typeof parsed.result === "string" ? parsed.result : JSON.stringify(parsed.result);
-    }
+    const result = extractClaudeResult(JSON.parse(stdout.trim()));
+    if (result !== undefined) return result;
   } catch {}
   return stdout;
+}
+
+function extractClaudeResult(value: unknown): string | undefined {
+  if (Array.isArray(value)) {
+    for (let i = value.length - 1; i >= 0; i--) {
+      const result = extractClaudeResult(value[i]);
+      if (result !== undefined) return result;
+    }
+    return undefined;
+  }
+  if (typeof value !== "object" || value === null) return undefined;
+  const record = value as Record<string, unknown>;
+  if (Object.prototype.hasOwnProperty.call(record, "result")) {
+    return typeof record["result"] === "string" ? record["result"] : JSON.stringify(record["result"]);
+  }
+  const message = record["message"];
+  if (typeof message === "object" && message !== null) {
+    const content = (message as Record<string, unknown>)["content"];
+    if (Array.isArray(content)) {
+      const text = content
+        .map((part) => typeof part === "object" && part !== null ? (part as Record<string, unknown>)["text"] : undefined)
+        .filter((text): text is string => typeof text === "string" && text.trim().length > 0)
+        .join("\n");
+      if (text) return text;
+    }
+  }
+  return undefined;
+}
+
+function nonZeroErrorMessage(code: number | null, stdout: string, stderr: string): string {
+  const detail = stderr.trim() || resultFromStdout(stdout).trim() || stdout.trim();
+  if (/not logged in|authentication_failed|run \/login/i.test(detail)) {
+    return `Claude Code is not authenticated: ${detail}\nRun: claude auth login`;
+  }
+  return `claude exited ${code}: ${detail.slice(0, 500)}`;
 }
 
 function exitsZero(command: string, args: string[]): Promise<boolean> {
@@ -99,7 +132,7 @@ export class ClaudeCodeDriver {
       child.on("close", (code) => {
         finish(() => {
           if (code !== 0) {
-            reject(new Error(`claude exited ${code}: ${stderr.slice(0, 500)}`));
+            reject(new Error(nonZeroErrorMessage(code, stdout, stderr)));
           } else {
             resolve(resultFromStdout(stdout));
           }
