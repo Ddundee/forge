@@ -1,4 +1,4 @@
-import { BaseAgent, AgentResult } from "./base.js";
+import { BaseAgent, AgentResult, type AgentRunOptions } from "./base.js";
 import { ModelTier } from "../router.js";
 
 const SYSTEM = `You are a QA engineer verifying that a project builds and its tests pass.
@@ -34,7 +34,8 @@ export class VerificationAgent extends BaseAgent {
       { role: "system", content: SYSTEM },
       { role: "user", content: `Architecture:\n${args["architecture"]}\n\nSpec:\n${args["spec"]}\n\nWorkspace root: ${workspace}` },
     ];
-    const response = await this.runAgenticLoop(messages, workspace);
+    const opts: AgentRunOptions = { skillContext: args["skillContext"] as AgentRunOptions["skillContext"] };
+    const response = await this.runAgenticLoop(messages, workspace, undefined, opts);
     let report: Record<string, unknown[]>;
     try {
       report = JSON.parse(this.extractJson(response));

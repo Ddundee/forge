@@ -15,12 +15,18 @@ import { DeployAgent } from "./agents/deploy.js";
 import { LiveEventFn } from "./agents/base.js";
 import { externalAgentFor } from "./externalAgents.js";
 import { normalizeTaskGraph } from "./taskGraphValidation.js";
+import {
+  createSkillPipelineCoordinator,
+  type SkillPipelineCoordinator,
+  type NoopSkillPipelineCoordinator,
+} from "./skills/pipeline.js";
 
 type AskUser = (question: string) => Promise<string | undefined>;
 
 export class Overseer {
   private emit: (msg: string) => void;
   private liveEvent?: LiveEventFn;
+  private skills: SkillPipelineCoordinator | NoopSkillPipelineCoordinator;
 
   constructor(
     private session: Session,
@@ -32,6 +38,17 @@ export class Overseer {
       eventCallback?.(msg);
     };
     this.liveEvent = liveEvent;
+    this.skills = createSkillPipelineCoordinator({
+      session: {
+        id: this.session.id,
+        idea: this.session.idea,
+        workspace: this.session.workspace,
+        config: this.session.config,
+        db: this.session.db,
+        getReasoningModel: () => this.session.router.modelFor(ModelTier.REASONING),
+      },
+      emit: this.emit,
+    });
   }
 
   async run(askUser?: AskUser): Promise<void> {
@@ -86,7 +103,11 @@ export class Overseer {
 
   private async architecture(): Promise<void> {
     this.emit("Picking stack & file structure…");
-    const result = await this.agent(ArchitectureAgent).run({ spec: this.spec() });
+    const skills = await this.skills.prepareForArchitecture({ spec: this.spec() });
+    const result = await this.agent(ArchitectureAgent).run({
+      spec: this.spec(),
+      skillContext: skills.skillContext,
+    });
     if (result.success) {
       this.session.db.updateSession(this.session.id, { architecture: result.output });
       try {
@@ -99,7 +120,12 @@ export class Overseer {
 
   private async taskGraph(): Promise<void> {
     this.emit("Building task dependency graph…");
-    const result = await this.agent(TaskGraphAgent).run({ spec: this.spec(), architecture: this.arch() });
+    const skills = await this.skills.prepareForTaskGraph({ spec: this.spec(), architecture: this.arch() });
+    const result = await this.agent(TaskGraphAgent).run({
+      spec: this.spec(),
+      architecture: this.arch(),
+      skillContext: skills.skillContext,
+    });
     if (!result.success) {
       throw new Error(`Task graph failed: ${result.error ?? "invalid response"}`);
     }
@@ -116,6 +142,18 @@ export class Overseer {
   private async coding(): Promise<void> {
     const pending = this.session.db.getTasks(this.session.id, "pending");
     if (!pending.length) { this.session.advancePhase(Phase.INTEGRATION); return; }
+
+    await this.skills.prepareForCodingPhase({
+      spec: this.spec(),
+      architecture: this.arch(),
+      pendingTasks: pending.map((t) => ({
+        id: String(t["id"]),
+        title: String(t["title"]),
+        type: String(t["type"] ?? "coding"),
+      })),
+      cycle: this.session.cycle,
+    });
+
     this.emit(`Coding ${pending.length} tasks in parallel…`);
 
     const useIsolation =
@@ -146,11 +184,23 @@ export class Overseer {
     const id = String(task["id"]);
     const title = String(task["title"]);
     const workspace = workspaceOverride ?? this.session.workspace;
+    const externalAgent = externalAgentFor(this.session.router.modelFor(ModelTier.REASONING));
+
+    const skills = await this.skills.prepareForCodingTask({
+      spec: this.spec(),
+      architecture: this.arch(),
+      task: { id, title, type: String(task["type"] ?? "coding") },
+      workspace,
+      cycle: this.session.cycle,
+      externalAgent,
+    });
+
     this.emit(`Coding: ${title}`);
     this.session.db.updateTask(id, { status: "in_progress" });
     const result = await this.agent(CodingAgent).run({
       taskTitle: title, spec: this.spec(), architecture: this.arch(),
       workspace, taskId: id,
+      skillContext: skills.skillContext,
     });
     this.session.db.updateTask(id, { status: result.success ? "completed" : "failed", output: result.output });
     this.emit(`${result.success ? "✓" : "✗"} ${title}`);
@@ -166,21 +216,52 @@ export class Overseer {
 
   private async integration(): Promise<void> {
     this.emit("Wiring modules together…");
-    const result = await this.agent(IntegrationAgent).run({ workspace: this.session.workspace, spec: this.spec(), architecture: this.arch() });
+    const skills = await this.skills.prepareForIntegration({
+      workspace: this.session.workspace,
+      architecture: this.arch(),
+      spec: this.spec(),
+      cycle: this.session.cycle,
+    });
+    const result = await this.agent(IntegrationAgent).run({
+      workspace: this.session.workspace,
+      spec: this.spec(),
+      architecture: this.arch(),
+      skillContext: skills.skillContext,
+    });
     this.emit(`Integration: ${result.success ? "all imports resolved" : "failed"}`);
     this.session.advancePhase(Phase.TESTING);
   }
 
   private async testing(): Promise<void> {
     this.emit("Writing and running tests…");
-    const result = await this.agent(TestAgent).run({ workspace: this.session.workspace, architecture: this.arch() });
+    const skills = await this.skills.prepareForTesting({
+      workspace: this.session.workspace,
+      architecture: this.arch(),
+      cycle: this.session.cycle,
+    });
+    const result = await this.agent(TestAgent).run({
+      workspace: this.session.workspace,
+      architecture: this.arch(),
+      skillContext: skills.skillContext,
+    });
     this.emit(`Tests: ${result.success ? "passed" : "some failures — continuing"}`);
     this.session.advancePhase(Phase.VERIFICATION);
   }
 
   private async verification(): Promise<void> {
     this.emit("Building app and running full suite…");
-    const result = await this.agent(VerificationAgent).run({ workspace: this.session.workspace, architecture: this.arch(), spec: this.spec() });
+    const skills = await this.skills.prepareForVerification({
+      workspace: this.session.workspace,
+      architecture: this.arch(),
+      spec: this.spec(),
+      cycle: this.session.cycle,
+    });
+    const result = await this.agent(VerificationAgent).run({
+      workspace: this.session.workspace,
+      architecture: this.arch(),
+      spec: this.spec(),
+      skillContext: skills.skillContext,
+    });
     if (result.success) {
       const next = this.session.deployTarget ? Phase.DEPLOY : Phase.DONE;
       this.session.advancePhase(next);
@@ -197,6 +278,16 @@ export class Overseer {
     let report: Record<string, unknown[]> = { failed: [], errors: [] };
     try { report = JSON.parse(result.output); } catch {}
     const failures = (report["failed"] as string[]) ?? [];
+    const errors = (report["errors"] as string[]) ?? [];
+
+    await this.skills.prepareForVerificationFailure({
+      spec: this.spec(),
+      architecture: this.arch(),
+      failures,
+      errors,
+      cycle: this.session.cycle,
+    });
+
     for (const failure of failures) {
       this.session.db.createTask(this.session.id, `Fix: ${failure}`, "coding");
     }
@@ -206,7 +297,19 @@ export class Overseer {
 
   private async deploy(): Promise<void> {
     this.emit("Deploying…");
-    const result = await this.agent(DeployAgent).run({ workspace: this.session.workspace, architecture: this.arch(), target: this.session.deployTarget ?? "none" });
+    const externalAgent = externalAgentFor(this.session.router.modelFor(ModelTier.STANDARD));
+    const skills = await this.skills.prepareForDeploy({
+      workspace: this.session.workspace,
+      architecture: this.arch(),
+      target: this.session.deployTarget ?? "none",
+      externalAgent,
+    });
+    const result = await this.agent(DeployAgent).run({
+      workspace: this.session.workspace,
+      architecture: this.arch(),
+      target: this.session.deployTarget ?? "none",
+      skillContext: skills.skillContext,
+    });
     this.emit(`Deploy: ${result.success ? "live" : "failed"} — ${result.output.slice(0, 80)}`);
     this.session.advancePhase(Phase.DONE);
   }

@@ -1,4 +1,4 @@
-import { BaseAgent, AgentResult } from "./base.js";
+import { BaseAgent, AgentResult, type AgentRunOptions } from "./base.js";
 import { ModelTier } from "../router.js";
 
 const SYSTEM = `You are a senior engineer responsible for wiring a project together after all tasks are coded.
@@ -29,7 +29,8 @@ export class IntegrationAgent extends BaseAgent {
         content: `Spec:\n${args["spec"]}\n\nArchitecture:\n${args["architecture"]}\n\nWorkspace root: ${args["workspace"]}`,
       },
     ];
-    const summary = await this.runAgenticLoop(messages, String(args["workspace"] ?? ""));
+    const opts: AgentRunOptions = { skillContext: args["skillContext"] as AgentRunOptions["skillContext"] };
+    const summary = await this.runAgenticLoop(messages, String(args["workspace"] ?? ""), undefined, opts);
     return { success: true, output: summary || "Integration complete" };
   }
 }
