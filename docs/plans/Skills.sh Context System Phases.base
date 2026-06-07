@@ -1,0 +1,32 @@
+filters:
+  and:
+    - file.inFolder("forgecli/skills-sh-context-phases")
+    - file.hasTag("forgecli/skills-sh-context")
+properties:
+  phase:
+    displayName: Phase
+  status:
+    displayName: Status
+  research_gate:
+    displayName: Research Gate
+  next_action:
+    displayName: Next Action
+  parent:
+    displayName: Parent
+views:
+  - type: table
+    name: Phase Tracker
+    order:
+      - file.name
+      - phase
+      - status
+      - research_gate
+      - next_action
+      - parent
+  - type: cards
+    name: Research Board
+    order:
+      - file.name
+      - status
+      - research_gate
+      - next_action
