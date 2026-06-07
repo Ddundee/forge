@@ -4,7 +4,7 @@ import * as os from "os";
 import { randomUUID } from "crypto";
 import { ForgeDb } from "./db.js";
 import { LLMRouter } from "./router.js";
-import { ForgeConfig, loadConfig } from "./config.js";
+import { ForgeConfig, loadConfig, normalizeSkillConfig } from "./config.js";
 import { Phase, transition } from "./stateMachine.js";
 import { type MdCatalog, listToolCallModels, SUPPORTED_PROVIDERS } from "./modelsdev.js";
 import { AutoSelector } from "./autoSelector.js";
@@ -34,6 +34,17 @@ function wireAutoSelector(
   router.setAutoSelector(new AutoSelector(cfg.autoOverseer, cfg.priority, available, logFn));
 }
 
+function applySessionSkillSnapshot(current: ForgeConfig, row: Record<string, unknown>): ForgeConfig {
+  const raw = typeof row["config_json"] === "string" ? row["config_json"] : "{}";
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const skills = normalizeSkillConfig(parsed["skills"]);
+    return current.withSkills(skills);
+  } catch {
+    return current;
+  }
+}
+
 export class Session {
   constructor(
     public id: string,
@@ -48,13 +59,20 @@ export class Session {
     public config: ForgeConfig,
   ) {}
 
-  static create(idea: string, deployTarget?: string, sessionsDir = SESSIONS_DIR, workspace?: string, catalog?: MdCatalog): Session {
+  static create(
+    idea: string,
+    deployTarget?: string,
+    sessionsDir = SESSIONS_DIR,
+    workspace?: string,
+    catalog?: MdCatalog,
+    configOverride?: ForgeConfig,
+  ): Session {
     const id = randomUUID().slice(0, 8);
     const sessionDir = path.join(sessionsDir, id);
     fs.mkdirSync(path.join(sessionDir, "logs"), { recursive: true });
     const resolvedWorkspace = workspace ?? path.join(sessionDir, "workspace");
     fs.mkdirSync(resolvedWorkspace, { recursive: true });
-    const cfg = loadConfig();
+    const cfg = configOverride ?? loadConfig();
     const db = new ForgeDb(path.join(sessionDir, "session.db"));
     db.createSession(idea, id, JSON.stringify(cfg.toJson()));
     db.updateSession(id, { workspace: resolvedWorkspace });
@@ -71,10 +89,10 @@ export class Session {
   static load(sessionId: string, sessionsDir = SESSIONS_DIR, catalog?: MdCatalog): Session {
     const sessionDir = path.join(sessionsDir, sessionId);
     if (!fs.existsSync(sessionDir)) throw new Error(`Session ${sessionId} not found`);
-    const cfg = loadConfig();
     const db = new ForgeDb(path.join(sessionDir, "session.db"));
     const row = db.getSession(sessionId);
     if (!row) throw new Error(`Session ${sessionId} not in database`);
+    const cfg = applySessionSkillSnapshot(loadConfig(), row);
     const workspace = row["workspace"]
       ? String(row["workspace"])
       : path.join(sessionDir, "workspace");

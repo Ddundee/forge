@@ -14,7 +14,7 @@ export const DEFAULT_SKILL_CONFIG: SkillConfig = {
   installTargets: ["forge", "agents"],
 };
 
-function normalizeSkillConfig(value: unknown): SkillConfig {
+export function normalizeSkillConfig(value: unknown): SkillConfig {
   const data = (value && typeof value === "object") ? value as Record<string, unknown> : {};
   const nonNegativeNumber = (raw: unknown, fallback: number): number => {
     const parsed = Number(raw ?? fallback);
@@ -85,6 +85,17 @@ export class ForgeConfig {
     public skills: SkillConfig = DEFAULT_SKILL_CONFIG,
   ) {}
 
+  withSkills(skills: SkillConfig): ForgeConfig {
+    return new ForgeConfig(
+      this.profile,
+      { ...this.models },
+      this.maxCycles,
+      this.priority,
+      this.autoOverseer,
+      skills,
+    );
+  }
+
   toJson(): Record<string, unknown> {
     return {
       profile: this.profile,
@@ -148,7 +159,8 @@ export function loadKeys(keysFile = KEYS_FILE): void {
 }
 
 export async function runSetupWizard(): Promise<ForgeConfig> {
-  const { select, checkbox, password } = await import("@inquirer/prompts");
+  const { select, checkbox, password, input } = await import("@inquirer/prompts");
+  const { configureSkillsForSetup } = await import("./skills/setup.js");
 
   console.log("\n⚒  FORGE  —  idea to product in one command\n");
 
@@ -215,7 +227,11 @@ export async function runSetupWizard(): Promise<ForgeConfig> {
           { name: "Claude Code CLI", value: "claude-code" },
         ],
       }) as string;
-    const cfg = new ForgeConfig(profile, {}, 5, priority);
+    let cfg = new ForgeConfig(profile, {}, 5, priority);
+    cfg = await configureSkillsForSetup(cfg, { select, checkbox, input }, {
+      selectedProfile: cfg.profile,
+      output: console,
+    });
     saveConfig(cfg);
     console.log("OK  Configuration saved to ~/.forge/config.toml\n");
     return cfg;
@@ -264,7 +280,11 @@ export async function runSetupWizard(): Promise<ForgeConfig> {
       message: "Pick the overseer model (the AI that will decide all other models):",
       choices: allModelChoices,
     }) as string;
-    const cfg = new ForgeConfig("auto", {}, 5, priority, overseer);
+    let cfg = new ForgeConfig("auto", {}, 5, priority, overseer);
+    cfg = await configureSkillsForSetup(cfg, { select, checkbox, input }, {
+      selectedProfile: cfg.profile,
+      output: console,
+    });
     saveConfig(cfg);
     if (Object.keys(keys).length) saveKeys(keys);
     console.log("\n✓ Configuration saved to ~/.forge/config.toml\n");
@@ -287,7 +307,11 @@ export async function runSetupWizard(): Promise<ForgeConfig> {
   const profile = providers.includes("Anthropic (Claude)") ? "claude-primary"
     : providers.includes("OpenAI") ? "openai-primary" : "claude-primary";
 
-  const cfg = new ForgeConfig(profile, chosenModels, 5, priority);
+  let cfg = new ForgeConfig(profile, chosenModels, 5, priority);
+  cfg = await configureSkillsForSetup(cfg, { select, checkbox, input }, {
+    selectedProfile: cfg.profile,
+    output: console,
+  });
   saveConfig(cfg);
   if (Object.keys(keys).length) saveKeys(keys);
   console.log("\n✓ Configuration saved to ~/.forge/config.toml\n");
