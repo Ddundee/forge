@@ -57,3 +57,56 @@ export interface SkillInjectionRecord {
   contextKind: "compact" | "full";
   charCount: number;
 }
+
+export type SkillContextKind = "compact" | "full";
+
+export type SkillContextMode =
+  | "native-tool-loop"
+  | "one-shot"
+  | "codex-cli"
+  | "claude-code";
+
+export interface SkillContextRequest {
+  workspace: string;
+  agentName: string;
+  taskId?: string;
+  attempt: number;
+  mode: SkillContextMode;
+  maxChars: number;
+  selectionIdsBySourceKey: Record<string, string>;
+  relevantSourceKeys?: string[];
+}
+
+export interface CompactSkillContextEntry {
+  sourceKey: string;
+  selectionId: string;
+  packageRef: string;
+  skillName: string;
+  displayName: string;
+  description: string;
+  forgePath: string;
+  agentsPath?: string;
+  claudePath?: string;
+}
+
+export interface SkillReadRequest {
+  sourceKey: string;
+  file?: string;
+  maxChars?: number;
+}
+
+export interface SkillReadResult {
+  sourceKey: string;
+  relativePath: string;
+  content: string;
+  charCount: number;
+  truncated: boolean;
+}
+
+export interface RenderedSkillContext {
+  kind: SkillContextKind;
+  content: string;
+  charCount: number;
+  sourceKeys: string[];
+  truncated: boolean;
+}
