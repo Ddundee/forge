@@ -130,3 +130,30 @@ test("max skills limit stops selection after limit reached", () => {
   expect(selected).toHaveLength(1);
   expect(maxReached).toHaveLength(1);
 });
+
+test("slug tokenization improves relevance for hyphenated skill names", () => {
+  const c = candidate({ packageRef: "vtex/skills", skillName: "vtex-io-react-apps", installCount: 1000 });
+  const score = scoreSkillCandidate(c, q("react frontend"), testConfig({ minInstallCount: 0 }));
+  expect(score.relevance).toBeGreaterThan(0);
+});
+
+test("candidateId is preserved through rankAndSelectSkills", () => {
+  const c = candidate({ packageRef: "vercel-labs/agent-skills", skillName: "deploy-to-vercel", installCount: 66000 });
+  const ranked = rankAndSelectSkills({
+    config: testConfig(),
+    candidates: [{ query: q("vercel deployment", "DEPLOY"), candidate: c, candidateId: "c42" }],
+    scoreThreshold: 0,
+  });
+  expect(ranked[0].candidateId).toBe("c42");
+});
+
+test("null title and description do not throw in phaseFit scoring", () => {
+  const c = candidate({ packageRef: "vercel-labs/agent-skills", skillName: "deploy-to-vercel", installCount: 66000 });
+  expect(() => scoreSkillCandidate(c, q("vercel deployment", "DEPLOY"), testConfig())).not.toThrow();
+});
+
+test("build token is not a stop word in scoring relevance", () => {
+  const c = candidate({ packageRef: "vercel-labs/agent-skills", skillName: "build-tool", installCount: 1000 });
+  const score = scoreSkillCandidate(c, q("build tool"), testConfig({ minInstallCount: 0 }));
+  expect(score.relevance).toBeGreaterThan(0);
+});

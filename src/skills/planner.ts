@@ -19,7 +19,7 @@ export interface SkillPlanningInput {
 }
 
 const STOP_WORDS = new Set([
-  "a", "an", "and", "app", "application", "build", "create",
+  "a", "an", "and", "app", "application", "create",
   "for", "of", "the", "to", "with",
 ]);
 
@@ -32,7 +32,8 @@ function mq(query: string, source: SkillQuerySource, phase: string, reason: stri
 function words(text: string): string[] {
   return text
     .toLowerCase()
-    .replace(/[^a-z0-9+#.\- ]+/g, " ")
+    .replace(/[-_/]+/g, " ")
+    .replace(/[^a-z0-9+#. ]+/g, " ")
     .split(/\s+/)
     .filter((w) => w.length >= 2 && !STOP_WORDS.has(w));
 }

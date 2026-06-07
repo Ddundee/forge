@@ -13,7 +13,6 @@ import {
 function makeCandidate(overrides: Partial<SkillCandidate> & { skillName: string }): SkillCandidate {
   return {
     packageRef: overrides.packageRef ?? "test-owner/test-repo",
-    skillName: overrides.skillName,
     title: overrides.skillName,
     ...overrides,
   };

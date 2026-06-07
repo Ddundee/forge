@@ -10,16 +10,23 @@ export interface SkillScoreBreakdown {
   total: number;
 }
 
+export interface SkillCandidateForRanking {
+  candidate: SkillCandidate;
+  query: PlannedSkillQuery;
+  candidateId?: string;
+}
+
 export interface RankedSkillCandidate {
   candidate: SkillCandidate;
   query: PlannedSkillQuery;
+  candidateId?: string;
   score: SkillScoreBreakdown;
   selected: boolean;
   skipReason?: string;
 }
 
 export interface SkillRankingInput {
-  candidates: Array<{ candidate: SkillCandidate; query: PlannedSkillQuery }>;
+  candidates: SkillCandidateForRanking[];
   config: SkillConfig;
   existingSkillKeys?: Set<string>;
   maxSkills?: number;
@@ -41,7 +48,8 @@ const STOP_WORDS = new Set(["a", "an", "and", "for", "of", "the", "to", "with"])
 function words(text: string): Set<string> {
   const tokens = text
     .toLowerCase()
-    .replace(/[^a-z0-9+#.\- ]+/g, " ")
+    .replace(/[-_/]+/g, " ")
+    .replace(/[^a-z0-9+#. ]+/g, " ")
     .split(/\s+/)
     .filter((w) => w.length >= 2 && !STOP_WORDS.has(w));
   return new Set(tokens);
@@ -85,7 +93,7 @@ function installPopularityScore(candidate: SkillCandidate): number {
 }
 
 function phaseFitScore(candidate: SkillCandidate, query: PlannedSkillQuery): number {
-  const text = `${candidate.skillName} ${candidate.title} ${candidate.description}`.toLowerCase();
+  const text = `${candidate.skillName} ${candidate.title ?? ""} ${candidate.description ?? ""}`.toLowerCase();
   if (query.phase === "ARCHITECTURE" && /architecture|design|stack|frontend|backend|database/.test(text)) return 1;
   if (query.phase === "CODING" && /react|next|typescript|python|api|frontend|backend|database/.test(text)) return 0.85;
   if (query.phase === "TESTING" && /test|testing|playwright|jest|vitest|pytest/.test(text)) return 1;
@@ -126,9 +134,10 @@ export function rankAndSelectSkills(input: SkillRankingInput): RankedSkillCandid
   const seen = new Set<string>();
 
   const ranked: RankedSkillCandidate[] = input.candidates
-    .map(({ candidate, query }) => ({
+    .map(({ candidate, query, candidateId }) => ({
       candidate,
       query,
+      candidateId,
       score: scoreSkillCandidate(candidate, query, input.config, input.existingSkillKeys),
       selected: false,
     }))
