@@ -94,3 +94,112 @@ test("listSessions aggregates total_cost", () => {
   const sessions = db.listSessions();
   expect(sessions[0]["total_cost"]).toBeCloseTo(0.005);
 });
+
+test("logSkillQuery persists a search query", () => {
+  const sid = db.createSession("idea");
+  const qid = db.logSkillQuery(sid, "ARCHITECTURE", "react frontend", 1);
+  const queries = db.getSkillQueries(sid);
+  expect(qid).toHaveLength(8);
+  expect(queries.some((r) => r["query"] === "react frontend")).toBe(true);
+  expect(queries[0]["attempt"]).toBe(1);
+});
+
+test("skill queries are queryable by attempt", () => {
+  const sid = db.createSession("idea");
+  db.logSkillQuery(sid, "ARCHITECTURE", "react frontend", 1);
+  db.logSkillQuery(sid, "CODING", "debug failing tests", 2);
+
+  const secondAttempt = db.getSkillQueries(sid, 2);
+  expect(secondAttempt).toHaveLength(1);
+  expect(secondAttempt[0]["attempt"]).toBe(2);
+  expect(secondAttempt[0]["query"]).toBe("debug failing tests");
+});
+
+test("saveSkillCandidate persists candidate metadata", () => {
+  const sid = db.createSession("idea");
+  const qid = db.logSkillQuery(sid, "ARCHITECTURE", "react frontend", 1);
+  const cid = db.saveSkillCandidate(sid, qid, {
+    packageRef: "vercel-labs/agent-skills",
+    skillName: "frontend-design",
+    title: "Frontend Design",
+    description: "Guidance for polished frontend work",
+    url: "https://skills.sh/vercel-labs/agent-skills/frontend-design",
+    installCount: 100000,
+    score: 0.92,
+    raw: { source: "fixture" },
+  });
+  const candidates = db.getSkillCandidates(sid);
+  expect(cid).toHaveLength(8);
+  expect(candidates[0]["skill_name"]).toBe("frontend-design");
+  expect(candidates[0]["package_ref"]).toBe("vercel-labs/agent-skills");
+});
+
+test("skill audit selection install and injection records are persisted", () => {
+  const sid = db.createSession("idea");
+  const qid = db.logSkillQuery(sid, "CODING", "testing", 2);
+  const cid = db.saveSkillCandidate(sid, qid, {
+    packageRef: "anthropics/skills",
+    skillName: "testing",
+    title: "Testing",
+    description: "Testing guidance",
+  });
+  db.logSkillAudit(sid, cid, { verdict: "pass", reasons: ["trusted source"] });
+  const selectionId = db.selectSkill(sid, {
+    candidateId: cid,
+    status: "selected",
+    phase: "CODING",
+    attempt: 2,
+    rationale: "Matches test task",
+  });
+  db.logSkillInstallation(sid, {
+    selectionId,
+    attempt: 2,
+    target: "forge",
+    installPath: ".forge/skills/testing",
+    status: "installed",
+  });
+  db.logSkillInjection(sid, {
+    selectionId,
+    attempt: 2,
+    agentName: "CodingAgent",
+    contextKind: "compact",
+    charCount: 1200,
+  });
+  const selections = db.getSkillSelections(sid);
+  expect(selections).toHaveLength(1);
+  expect(selections[0]["status"]).toBe("selected");
+  expect(selections[0]["attempt"]).toBe(2);
+  expect(db.getSkillAuditTrail(sid).some((r) => r["verdict"] === "pass")).toBe(true);
+});
+
+test("getSkillSelectionKeys returns joined selected candidate keys", () => {
+  const sid = db.createSession("idea");
+  const qid = db.logSkillQuery(sid, "CODING", "vercel deployment", 1);
+  const selectedCandidateId = db.saveSkillCandidate(sid, qid, {
+    packageRef: "vercel-labs/agent-skills",
+    skillName: "deploy-to-vercel",
+  });
+  const skippedCandidateId = db.saveSkillCandidate(sid, qid, {
+    packageRef: "example/skills",
+    skillName: "skip-me",
+  });
+
+  db.selectSkill(sid, {
+    candidateId: selectedCandidateId,
+    status: "selected",
+    phase: "CODING",
+    attempt: 1,
+    rationale: "selected for audit",
+  });
+  db.selectSkill(sid, {
+    candidateId: skippedCandidateId,
+    status: "skipped",
+    phase: "CODING",
+    attempt: 1,
+    rationale: "below threshold",
+  });
+
+  expect(db.getSkillSelectionKeys(sid)).toEqual([
+    "vercel-labs/agent-skills@deploy-to-vercel",
+  ]);
+});

@@ -1,8 +1,9 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
-import { ForgeConfig, loadConfig, saveConfig, loadKeys, PROVIDER_PROFILES } from "../src/config.js";
+import { ForgeConfig, loadConfig, saveConfig, loadKeys, PROVIDER_PROFILES, DEFAULT_SKILL_CONFIG } from "../src/config.js";
 import { ModelTier } from "../src/router.js";
+import type { SkillConfig } from "../src/skills/types.js";
 
 let tmpDir: string;
 
@@ -102,4 +103,68 @@ test("PROVIDER_PROFILES contains codex key", () => {
 
 test("PROVIDER_PROFILES contains claude-code key", () => {
   expect(PROVIDER_PROFILES).toHaveProperty("claude-code");
+});
+
+test("ForgeConfig defaults skills config to off", () => {
+  const cfg = new ForgeConfig();
+  expect(cfg.skills.mode).toBe("off");
+  expect(cfg.skills.maxSkills).toBe(3);
+  expect(cfg.skills.promptCharBudget).toBe(12000);
+  expect(cfg.skills.minInstallCount).toBe(100);
+  expect(cfg.skills.trustedSources).toContain("vercel-labs");
+  expect(cfg.skills.installTargets).toContain("forge");
+});
+
+test("saveConfig and loadConfig round-trips skills config", () => {
+  const configFile = path.join(tmpDir, "config.toml");
+  const skillsCfg: SkillConfig = {
+    mode: "auto",
+    maxSkills: 4,
+    promptCharBudget: 9000,
+    minInstallCount: 500,
+    trustedSources: ["vercel-labs"],
+    installTargets: ["forge", "agents"],
+  };
+  const cfg = new ForgeConfig("openai-primary", {}, 5, "quality", "", skillsCfg);
+  saveConfig(cfg, configFile);
+  const loaded = loadConfig(configFile);
+  expect(loaded.skills).toEqual(cfg.skills);
+});
+
+test("loadConfig defaults skills config when skills table is absent", () => {
+  const configFile = path.join(tmpDir, "config.toml");
+  fs.writeFileSync(configFile, 'profile = "claude-primary"\nmax_cycles = 5\n');
+  const loaded = loadConfig(configFile);
+  expect(loaded.skills.mode).toBe("off");
+  expect(loaded.skills.maxSkills).toBe(3);
+});
+
+test("loadConfig falls back to default install targets when all configured targets are invalid", () => {
+  const configFile = path.join(tmpDir, "config.toml");
+  fs.writeFileSync(configFile, [
+    'profile = "claude-primary"',
+    "",
+    "[skills]",
+    'install_targets = ["nonsense"]',
+  ].join("\n"));
+
+  const loaded = loadConfig(configFile);
+  expect(loaded.skills.installTargets).toEqual(DEFAULT_SKILL_CONFIG.installTargets);
+});
+
+test("loadConfig defaults invalid numeric skill values instead of storing NaN", () => {
+  const configFile = path.join(tmpDir, "config.toml");
+  fs.writeFileSync(configFile, [
+    'profile = "claude-primary"',
+    "",
+    "[skills]",
+    'max_skills = "many"',
+    'prompt_char_budget = "large"',
+    'min_install_count = "popular"',
+  ].join("\n"));
+
+  const loaded = loadConfig(configFile);
+  expect(loaded.skills.maxSkills).toBe(DEFAULT_SKILL_CONFIG.maxSkills);
+  expect(loaded.skills.promptCharBudget).toBe(DEFAULT_SKILL_CONFIG.promptCharBudget);
+  expect(loaded.skills.minInstallCount).toBe(DEFAULT_SKILL_CONFIG.minInstallCount);
 });

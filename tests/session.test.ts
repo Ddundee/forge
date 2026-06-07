@@ -62,3 +62,12 @@ test("loadLast returns most recently modified session", async () => {
   const last = Session.loadLast(tmpDir);
   expect(last.id).toBe(s2.id);
 });
+
+test("create stores config snapshot in session row", () => {
+  const s = makeSession();
+  const row = s.db.getSession(s.id);
+  const snapshot = JSON.parse(String(row?.["config_json"] ?? "{}"));
+  expect(snapshot).toHaveProperty("profile");
+  expect(snapshot).toHaveProperty("skills");
+  expect(snapshot.skills).toHaveProperty("mode");
+});

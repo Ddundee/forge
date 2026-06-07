@@ -1,0 +1,19 @@
+You are being given a Skill to execute for the user's next request.
+
+Use the following SKILL.md as your instructions:
+
+<SKILL.md>
+---
+name: obsidian-markdown
+description: Create and edit Obsidian Flavored Markdown with wikilinks, embeds, callouts, properties, and other Obsidian-specific syntax.
+---
+
+# Obsidian Flavored Markdown Skill
+
+Use Obsidian-flavored Markdown conventions for all notes.
+</SKILL.md>
+
+Supporting files for this skill were downloaded to:
+/tmp/skills-use-FCPxnE/obsidian-markdown
+
+When the SKILL.md references relative paths, read them from that directory.
