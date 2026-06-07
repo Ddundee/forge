@@ -29,7 +29,7 @@ export interface SkillAuditResult {
   reasons: string[];
 }
 
-export type SkillSelectionStatus = "selected" | "skipped";
+export type SkillSelectionStatus = "selected" | "skipped" | "installed" | "failed";
 
 export interface SkillSelection {
   candidateId: string;
