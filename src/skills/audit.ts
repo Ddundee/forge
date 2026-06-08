@@ -64,12 +64,25 @@ export interface AuditSelectedSkillResult {
   failed: DetailedSkillAuditResult[];
 }
 
+/**
+ * Compute the overall audit verdict from a list of findings.
+ *
+ * @param findings - The array of audit findings to evaluate.
+ * @returns `'fail'` if any finding has severity `"block"`, `'warn'` if no `"block"` findings exist but at least one finding has severity `"warn"`, `'pass'` otherwise.
+ */
 function computeAuditVerdict(findings: SkillAuditFinding[]): SkillAuditVerdict {
   if (findings.some((f) => f.severity === "block")) return "fail";
   if (findings.some((f) => f.severity === "warn")) return "warn";
   return "pass";
 }
 
+/**
+ * Format audit findings into human-readable reason strings.
+ *
+ * @param findings - The list of audit findings to format
+ * @returns An array of strings where each entry is formatted as
+ * `[severity] id: message (location: snippet)` or `[severity] id: message (location)` when a snippet is not available
+ */
 function auditReasons(findings: SkillAuditFinding[]): string[] {
   return findings.map((f) => {
     const suffix = f.snippet ? ` (${f.location}: ${f.snippet})` : ` (${f.location})`;
@@ -77,6 +90,13 @@ function auditReasons(findings: SkillAuditFinding[]): string[] {
   });
 }
 
+/**
+ * Produces a concise human-readable summary of an audit from its verdict and findings.
+ *
+ * @param verdict - The computed audit verdict.
+ * @param findings - The list of findings used to count `block` and `warn` severities.
+ * @returns A summary string: `"No security issues found."` for `pass`; `"<n> blocking finding(s)."` for `fail`; `"<n> warning(s) requiring review."` for `warn`.
+ */
 function summarizeAudit(verdict: SkillAuditVerdict, findings: SkillAuditFinding[]): string {
   const blocks = findings.filter((f) => f.severity === "block").length;
   const warns = findings.filter((f) => f.severity === "warn").length;
@@ -85,6 +105,13 @@ function summarizeAudit(verdict: SkillAuditVerdict, findings: SkillAuditFinding[
   return `${warns} warning${warns !== 1 ? "s" : ""} requiring review.`;
 }
 
+/**
+ * Determines whether a candidate's package reference belongs to a trusted source.
+ *
+ * @param candidate - The skill candidate whose `packageRef` is checked (e.g., `owner/name` or a single token).
+ * @param config - Configuration containing `trustedSources`, an array of source identifiers to match against.
+ * @returns `true` if the package owner exactly matches a trusted source or the packageRef starts with a trusted source followed by `/`, `false` otherwise.
+ */
 function sourceIsTrusted(candidate: SkillCandidate, config: SkillConfig): boolean {
   const owner = (candidate.packageRef.split("/")[0] ?? "").toLowerCase();
   const packageRef = candidate.packageRef.toLowerCase();
@@ -94,11 +121,26 @@ function sourceIsTrusted(candidate: SkillCandidate, config: SkillConfig): boolea
   });
 }
 
+/**
+ * Determine if a skill candidate appears related to deployments based on its metadata.
+ *
+ * @param candidate - The skill candidate whose packageRef, skillName, title, and description are inspected
+ * @returns `true` if any of the inspected fields contain deployment-related keywords (`deploy`, `deployment`, `vercel`, `railway`, `fly`), `false` otherwise
+ */
 function expectedDeploymentSkill(candidate: SkillCandidate): boolean {
   const text = `${candidate.packageRef} ${candidate.skillName} ${candidate.title} ${candidate.description}`.toLowerCase();
   return /\b(deploy|deployment|vercel|railway|fly)\b/.test(text);
 }
 
+/**
+ * Adjusts a finding's severity for trusted sources and deployment-related skills.
+ *
+ * @param finding - The original audit finding to evaluate and possibly modify
+ * @param candidate - The skill candidate associated with the finding
+ * @param config - Audit configuration used to determine trusted sources
+ * @param fullText - Concatenated skill and support file text used to detect explicit safety boundaries or exclude patterns
+ * @returns The original finding or a copy with `severity: "info"` and an appended explanatory message when the finding originates from a trusted, deployment-related skill and matches rules that downgrade its severity; otherwise the original finding
+ */
 function adjustFindingSeverity(
   finding: SkillAuditFinding,
   candidate: SkillCandidate,
@@ -134,6 +176,15 @@ function adjustFindingSeverity(
   return finding;
 }
 
+/**
+ * Produces structural audit findings for a skill bundle's frontmatter and support files.
+ *
+ * Inspects the bundle's frontmatter for missing `name` or `description` and checks each support file
+ * for symlink/path-escape sentinel values or binary kind, emitting corresponding `SkillAuditFinding` entries.
+ *
+ * @param bundle - The skill bundle to inspect
+ * @returns An array of `SkillAuditFinding` objects representing metadata and support-file structure issues
+ */
 function auditBundleStructure(bundle: SkillBundle): SkillAuditFinding[] {
   const findings: SkillAuditFinding[] = [];
 
@@ -180,6 +231,14 @@ function auditBundleStructure(bundle: SkillBundle): SkillAuditFinding[] {
   return findings;
 }
 
+/**
+ * Audit a skill bundle for security and structural issues.
+ *
+ * Processes SKILL.md, extracted code blocks, and eligible support files; collects rule-based and structural findings, adjusts severities using candidate and config context, and aggregates an overall verdict and human-readable results.
+ *
+ * @param input - Skill bundle and contextual data used to produce the audit
+ * @returns The audit result containing the overall `verdict`, formatted `reasons`, the `candidateKey`, the list of adjusted `findings`, and a brief `summary`.
+ */
 export function auditSkillBundle(input: SkillAuditInput): DetailedSkillAuditResult {
   const targets: Array<{ location: string; text: string; appliesTo: "markdown" | "code" | "support" }> = [
     { location: "SKILL.md", text: input.bundle.skillMarkdown, appliesTo: "markdown" },
@@ -219,11 +278,28 @@ export function auditSkillBundle(input: SkillAuditInput): DetailedSkillAuditResu
   };
 }
 
+/**
+ * Extracts the SKILL.md section from a tool output string if present.
+ *
+ * @param rawOutput - The raw output that may contain a `<SKILL.md>...</SKILL.md>` block
+ * @returns The trimmed content between the SKILL.md tags, or `rawOutput` unchanged when no tags are found
+ */
 function extractSkillMarkdown(rawOutput: string): string {
   const match = rawOutput.match(/<SKILL\.md>([\s\S]*?)<\/SKILL\.md>/);
   return match ? match[1]!.trim() : rawOutput;
 }
 
+/**
+ * Audit a list of selected skill candidates by fetching each skill bundle, loading and auditing it, and classifying results.
+ *
+ * Performs these side effects for each candidate: logs the audit outcome via `db.logSkillAudit` and, for non-passing audits,
+ * persists a skipped selection via `db.selectSkill`.
+ *
+ * @param input - Contains session, workspace, phase, attempt, audit configuration, and the list of selected candidates to audit
+ * @param client - Skill fetcher used to obtain skill markdown/support output (omitted from detailed param docs)
+ * @param db - Persistence interface used to record audit logs and selection decisions (omitted from detailed param docs)
+ * @returns An object with `passed`, `warned`, and `failed` arrays of DetailedSkillAuditResult grouping audited candidates
+ */
 export async function auditSelectedSkills(
   input: AuditSelectedSkillInput,
   client: SkillUseClient,

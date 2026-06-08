@@ -14,6 +14,19 @@ export const DEFAULT_SKILL_CONFIG: SkillConfig = {
   installTargets: ["forge", "agents"],
 };
 
+/**
+ * Normalize arbitrary input into a validated SkillConfig.
+ *
+ * Converts unknown TOML/JSON input into a well-formed SkillConfig:
+ * - Treats non-object inputs as an empty configuration and falls back to defaults.
+ * - `mode` is `"auto"` only when the input equals `"auto"`, otherwise `"off"`.
+ * - Numeric fields (`maxSkills`, `promptCharBudget`, `minInstallCount`) are parsed as numbers, clamped to be >= 0, and defaulted when invalid.
+ * - `trustedSources` is taken from an input array of values converted to strings and filtered to truthy entries; otherwise defaults are used.
+ * - `installTargets` is taken from an input array of values converted to strings and restricted to the supported targets `"forge"`, `"agents"`, and `"claude"`; if none remain, defaults are used.
+ *
+ * @param value - Raw configuration value (typically parsed from TOML/JSON) to normalize into a SkillConfig
+ * @returns A validated SkillConfig with all fields present and normalized
+ */
 export function normalizeSkillConfig(value: unknown): SkillConfig {
   const data = (value && typeof value === "object") ? value as Record<string, unknown> : {};
   const nonNegativeNumber = (raw: unknown, fallback: number): number => {
@@ -125,6 +138,12 @@ export class ForgeConfig {
   }
 }
 
+/**
+ * Load the Forge configuration from a TOML file, falling back to defaults if the file is missing.
+ *
+ * @param configFile - Path to the TOML configuration file to read
+ * @returns A ForgeConfig constructed from the file's values; if the file does not exist, a default ForgeConfig
+ */
 export function loadConfig(configFile = CONFIG_FILE): ForgeConfig {
   if (!fs.existsSync(configFile)) return new ForgeConfig();
   const data = parseToml(fs.readFileSync(configFile, "utf8")) as any;
@@ -138,16 +157,38 @@ export function loadConfig(configFile = CONFIG_FILE): ForgeConfig {
   );
 }
 
+/**
+ * Persist a ForgeConfig to disk as TOML, creating the containing directory if necessary.
+ *
+ * @param cfg - The configuration to serialize and save
+ * @param configFile - Destination file path; defaults to CONFIG_FILE (`~/.forge/config.toml`)
+ */
 export function saveConfig(cfg: ForgeConfig, configFile = CONFIG_FILE): void {
   fs.mkdirSync(path.dirname(configFile), { recursive: true });
   fs.writeFileSync(configFile, stringifyToml(cfg.toJson()));
 }
 
+/**
+ * Persist key/value pairs to an env-style file, creating the parent directory if needed.
+ *
+ * Each entry is written as `KEY=VALUE` on its own line, the file is terminated with a trailing newline,
+ * and the file mode is set to `0o600`.
+ *
+ * @param keys - Mapping of environment variable names to their values to be written
+ * @param keysFile - Path to the output keys file (defaults to the configured keys file)
+ */
 export function saveKeys(keys: Record<string, string>, keysFile = KEYS_FILE): void {
   fs.mkdirSync(path.dirname(keysFile), { recursive: true });
   fs.writeFileSync(keysFile, Object.entries(keys).map(([k, v]) => `${k}=${v}`).join("\n") + "\n", { mode: 0o600 });
 }
 
+/**
+ * Loads KEY=VALUE pairs from a file into process.env without overwriting existing variables.
+ *
+ * Lines that are empty, start with `#`, or do not contain `=` are ignored. Each valid line is split at the first `=`; the left side is used as the environment variable name and the remainder (joined back with `=`) as its value. Environment variables already present in `process.env` are left unchanged.
+ *
+ * @param keysFile - Path to an env-style file containing `KEY=VALUE` lines (defaults to the configured keys file)
+ */
 export function loadKeys(keysFile = KEYS_FILE): void {
   if (!fs.existsSync(keysFile)) return;
   for (const line of fs.readFileSync(keysFile, "utf8").split("\n")) {
@@ -158,6 +199,13 @@ export function loadKeys(keysFile = KEYS_FILE): void {
   }
 }
 
+/**
+ * Run an interactive CLI wizard to configure Forge (select priority, providers, API keys, models, and skill settings).
+ *
+ * Saves the resulting configuration to the user's config file and persists any captured API keys to the keys file when provided.
+ *
+ * @returns The configured `ForgeConfig` instance created and saved by the wizard
+ */
 export async function runSetupWizard(): Promise<ForgeConfig> {
   const { select, checkbox, password, input } = await import("@inquirer/prompts");
   const { configureSkillsForSetup } = await import("./skills/setup.js");

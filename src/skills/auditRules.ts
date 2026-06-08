@@ -266,6 +266,15 @@ export const ALL_AUDIT_RULES: SkillAuditRule[] = [
   ...OPERATIONAL_WARNING_RULES,
 ];
 
+/**
+ * Run a set of audit rules against provided text and collect any matching findings.
+ *
+ * @param rules - The audit rules to evaluate.
+ * @param location - A location identifier to attach to each finding (e.g., file path or section).
+ * @param text - The content to scan for rule pattern matches.
+ * @param appliesTo - The content category to filter rules by (`"markdown" | "code" | "support"`).
+ * @returns An array of findings for rules that matched the text; each finding includes the rule id, category, severity, message, the provided location, and a redacted snippet of the first match. Each rule contributes at most one finding.
+ */
 export function runAuditRules(
   rules: SkillAuditRule[],
   location: string,

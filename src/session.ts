@@ -19,6 +19,20 @@ const PROVIDER_ENV_KEYS: Record<string, string> = {
   mistral:   "MISTRAL_API_KEY",
 };
 
+/**
+ * Configures the router's automatic model selector when auto-selection is enabled in the config.
+ *
+ * When `cfg.profile` is `"auto"`, `cfg.autoOverseer` is present, and `catalog` is provided, this sets
+ * the router's auto-selector to an AutoSelector initialized with the overseer, configured priority,
+ * the list of available model IDs discovered from `catalog`, and a logger that writes `AUTO_SELECT`
+ * events to `db` for `sessionId`.
+ *
+ * @param router - The LLMRouter to configure
+ * @param cfg - Forge configuration; `profile`, `autoOverseer`, and `priority` are used when enabling auto-selection
+ * @param db - Database used to persist auto-selection log events
+ * @param sessionId - Session identifier used as the owner of logged events
+ * @param catalog - Optional model catalog used to discover available model IDs; required for enabling auto-selection
+ */
 function wireAutoSelector(
   router: LLMRouter,
   cfg: ForgeConfig,
@@ -34,6 +48,13 @@ function wireAutoSelector(
   router.setAutoSelector(new AutoSelector(cfg.autoOverseer, cfg.priority, available, logFn));
 }
 
+/**
+ * Apply a persisted skills snapshot from a session database row to a base configuration.
+ *
+ * @param current - The base `ForgeConfig` to which persisted skills should be applied
+ * @param row - Database row that may contain a `config_json` string holding a serialized config (expected to include a `skills` field)
+ * @returns The `ForgeConfig` updated with normalized skills from the stored snapshot if parsing and normalization succeed, otherwise the original `current`
+ */
 function applySessionSkillSnapshot(current: ForgeConfig, row: Record<string, unknown>): ForgeConfig {
   const raw = typeof row["config_json"] === "string" ? row["config_json"] : "{}";
   try {

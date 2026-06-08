@@ -16,6 +16,13 @@ import {
   truncateWithNotice,
 } from "./render.js";
 
+/**
+ * Resolve a relative path against a base directory and ensure the result remains within that directory.
+ *
+ * @param rootDir - Base directory to resolve against
+ * @param relPath - Relative path to resolve; absolute paths are rejected
+ * @returns The resolved absolute path when it is equal to `rootDir` or located under it, `null` if `relPath` is absolute or resolves outside `rootDir`
+ */
 function resolveInside(rootDir: string, relPath: string): string | null {
   if (path.isAbsolute(relPath)) return null;
   const root = path.resolve(rootDir);
@@ -24,6 +31,13 @@ function resolveInside(rootDir: string, relPath: string): string | null {
   return resolved;
 }
 
+/**
+ * Compute the effective character cap for a given request mode.
+ *
+ * @param mode - The request mode which determines a mode-specific ceiling
+ *   ("one-shot" → 3000, "codex-cli" or "claude-code" → 4000, otherwise → 8000).
+ * @param maxChars - The caller-provided maximum character limit to be enforced.
+ * @returns The lesser of `maxChars` and the mode-specific ceiling.
 function capFor(mode: SkillContextRequest["mode"], maxChars: number): number {
   if (mode === "one-shot") return Math.min(maxChars, 3_000);
   if (mode === "codex-cli" || mode === "claude-code") return Math.min(maxChars, 4_000);

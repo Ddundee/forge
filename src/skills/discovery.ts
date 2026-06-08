@@ -50,6 +50,12 @@ export interface SkillDiscoveryDb {
 
 const DEFAULT_MAX_CANDIDATES_PER_QUERY = 6;
 
+/**
+ * Orchestrates planning, searching, persistence, ranking, and selection of skill candidates for a discovery session.
+ *
+ * Plans queries from `input`, uses `client` to fetch candidate skills for each planned query, persists queries and candidates via `db`, ranks and selects candidates, logs selection/skip decisions, and collects any recoverable per-query failures.
+ *
+ * @returns An object containing the planned queries, the ranked candidates, the subset of candidates that were selected, and any recoverable failures encountered while searching. */
 export async function discoverSkillCandidates(
   input: SkillDiscoveryInput,
   client: SkillSearchClient,

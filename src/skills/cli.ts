@@ -74,6 +74,12 @@ const DEFAULT_COMMAND = "npx";
 const DEFAULT_BASE_ARGS = ["--yes", "skills"];
 const DEFAULT_TIMEOUT_MS = 120_000;
 
+/**
+ * Build an environment object suitable for invoking the `skills` CLI with telemetry and color disabled.
+ *
+ * @param extra - Optional environment entries to merge; keys in `extra` override `process.env` but are overridden by the forced telemetry/color settings.
+ * @returns The merged environment object containing `process.env`, the provided `extra`, and the forced variables `DISABLE_TELEMETRY="1"`, `DO_NOT_TRACK="1"`, and `NO_COLOR="1"`.
+ */
 function makeSkillsEnv(extra?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   return {
     ...process.env,
@@ -84,15 +90,32 @@ function makeSkillsEnv(extra?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   };
 }
 
+/**
+ * Formats a failed command result into an error message.
+ *
+ * @returns An error message string containing the exit code and command output details.
+ */
 function formatSkillsError(result: SkillsCliCommandResult): string {
   const detail = stripAnsi(`${result.stderr}\n${result.stdout}`).trim();
   return `skills exited ${result.exitCode}: ${detail.slice(0, 1000)}`;
 }
 
+/**
+ * Removes ANSI escape sequences (terminal color/control codes) from a string.
+ *
+ * @param text - The input string that may contain ANSI escape codes
+ * @returns The input string with ANSI escape sequences removed
+ */
 export function stripAnsi(text: string): string {
   return text.replace(/\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, "");
 }
 
+/**
+ * Parses human-readable install counts like `12`, `3.5K`, or `1M` into an integer.
+ *
+ * @param text - Text containing the install count; may include `K` (thousands) or `M` (millions), case-insensitive
+ * @returns The parsed integer count (for example, `3500` for `"3.5K"`), or `undefined` if the input is missing or cannot be parsed
+ */
 export function parseInstallCount(text: string | undefined): number | undefined {
   if (!text) return undefined;
   const trimmed = text.trim().toUpperCase();
@@ -105,6 +128,13 @@ export function parseInstallCount(text: string | undefined): number | undefined 
   return Math.round(value);
 }
 
+/**
+ * Parses `skills find` CLI output into structured candidate results for a given query.
+ *
+ * @param query - The search query that produced the CLI output
+ * @param output - Raw stdout/stderr text from the `skills find` command
+ * @returns A `SkillsFindResult` containing the original `query`, an array of parsed `candidates` (each with package reference, skill name, optional URL, optional install count, and raw line data), and the unmodified `rawOutput`
+ */
 export function parseFindOutput(query: string, output: string): SkillsFindResult {
   const clean = stripAnsi(output);
   if (/No skills found/i.test(clean)) {
@@ -139,6 +169,15 @@ export function parseFindOutput(query: string, output: string): SkillsFindResult
   return { query, candidates, rawOutput: output };
 }
 
+/**
+ * Parses CLI text that lists available skills and returns structured skill entries.
+ *
+ * Parses `output` (ANSI sequences allowed) line-by-line, treating lines that match a valid
+ * skill name pattern as names and using the following non-header line as the description.
+ *
+ * @param output - Raw stdout text from the `skills` CLI (may include ANSI escape codes).
+ * @returns An array of `SkillsAvailableSkill` objects with `name` and `description` for each detected skill.
+ */
 export function parseAvailableSkillsOutput(output: string): SkillsAvailableSkill[] {
   const clean = stripAnsi(output);
   const lines = clean.split(/\r?\n/);
@@ -155,6 +194,16 @@ export function parseAvailableSkillsOutput(output: string): SkillsAvailableSkill
   return skills;
 }
 
+/**
+ * Parses the output of `skills use` to extract the full prompt, an embedded skill markdown block, and a support-file directory.
+ *
+ * @returns A `SkillsUseResult` containing:
+ * - `source` and `skillName` echoed from the call
+ * - `prompt`: the full command output
+ * - `skillMarkdown`: the content found between `<SKILL.md>...</SKILL.md>`, if present
+ * - `supportDir`: the path where supporting files were downloaded, if present
+ * - `rawOutput`: the original unmodified output
+ */
 export function parseUseOutput(source: string, skillName: string, output: string): SkillsUseResult {
   const skillMatch = output.match(/<SKILL\.md>\n([\s\S]*?)\n<\/SKILL\.md>/);
   const supportMatch = output.match(/Supporting files for this skill were downloaded to:\n(.+)\n/);
@@ -168,6 +217,13 @@ export function parseUseOutput(source: string, skillName: string, output: string
   };
 }
 
+/**
+ * Parse the JSON output from `skills list --json` into an array of installed skill entries.
+ *
+ * @param output - The raw JSON string produced by `skills list --json`
+ * @returns An array of `SkillsListEntry` objects; entries missing `name` or `path` are omitted
+ * @throws SkillsCliError if the parsed JSON value is not an array
+ */
 export function parseListJson(output: string): SkillsListEntry[] {
   const parsed = JSON.parse(output) as unknown;
   if (!Array.isArray(parsed)) {

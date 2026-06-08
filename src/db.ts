@@ -136,6 +136,11 @@ CREATE INDEX IF NOT EXISTS idx_skill_installations_session ON skill_installation
 CREATE INDEX IF NOT EXISTS idx_skill_injections_session ON skill_injections(session_id, attempt, selection_id, created_at);
 `;
 
+/**
+ * Generate an 8-character unique identifier.
+ *
+ * @returns An 8-character lowercase hexadecimal string derived from a UUID
+ */
 function uid(): string { return randomUUID().slice(0, 8); }
 function now(): string { return new Date().toISOString(); }
 function bindValue(value: unknown): any {
