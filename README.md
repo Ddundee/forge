@@ -5,9 +5,6 @@
   <a href="https://github.com/Ddundee/forge/releases/latest">
     <img alt="Version" src="https://img.shields.io/github/v/release/Ddundee/forge?label=version&color=blue" />
   </a>
-  <a href="https://github.com/Ddundee/forge/actions/workflows/test.yml">
-    <img alt="Tests" src="https://img.shields.io/github/actions/workflow/status/Ddundee/forge/test.yml?label=tests" />
-  </a>
   <a href="LICENSE">
     <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green" />
   </a>
