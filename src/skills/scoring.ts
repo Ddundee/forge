@@ -153,7 +153,7 @@ export function rankAndSelectSkills(input: SkillRankingInput): RankedSkillCandid
     }
     seen.add(key);
 
-    if ((item.candidate.installCount ?? 0) < input.config.minInstallCount && item.score.sourceReputation < 1) {
+    if ((item.candidate.installCount ?? 0) < input.config.minInstallCount) {
       item.skipReason = `install count below ${input.config.minInstallCount}`;
       continue;
     }

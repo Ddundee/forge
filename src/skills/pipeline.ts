@@ -577,7 +577,7 @@ export class SkillPipelineCoordinator {
     >;
     const selectionMap = new Map<string, string>(); // candidateId -> selectionId
     for (const row of allSelections) {
-      if (row["status"] === "selected") {
+      if (row["status"] === "selected" && row["candidate_id"] != null) {
         selectionMap.set(String(row["candidate_id"]), String(row["id"]));
       }
     }
@@ -623,7 +623,7 @@ export class SkillPipelineCoordinator {
     }
 
     try {
-      await ensureSkillsInstalledForWorkspace(
+      const installResults = await ensureSkillsInstalledForWorkspace(
         input.workspace,
         passed,
         this.deps.config,
@@ -632,8 +632,13 @@ export class SkillPipelineCoordinator {
         this.deps.db,
         this.deps.sessionId,
       );
+      const installedKeys = new Set(
+        installResults.filter((r) => r.status === "installed").map((r) => r.candidateKey),
+      );
       for (const skill of passed) {
-        this.installedSourceKeys.add(skillInstallKey(skill.candidate));
+        if (installedKeys.has(skillInstallKey(skill.candidate))) {
+          this.installedSourceKeys.add(skillInstallKey(skill.candidate));
+        }
       }
     } catch {
       // install errors are non-fatal

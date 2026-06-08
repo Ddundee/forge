@@ -45,9 +45,9 @@ const PROMPT_INJECTION_RULES: SkillAuditRule[] = [
     message: "Skill attempts to bypass higher-priority instructions.",
     appliesTo: ["markdown", "code", "support"],
     patterns: [
-      /\bignore\b[^\n]{0,60}(system|developer|previous|prior|above)\s+instructions\b/i,
-      /\boverride\b[^\n]{0,40}(system|developer|user)\s+(prompt|instructions)\b/i,
-      /\bdo not follow\b[^\n]{0,40}(system|developer|user)\s+instructions\b/i,
+      /\bignore\b[\s\S]{0,80}(system|developer|previous|prior|above)\s+instructions\b/i,
+      /\boverride\b[\s\S]{0,60}(system|developer|user)\s+(prompt|instructions)\b/i,
+      /\bdo not follow\b[\s\S]{0,60}(system|developer|user)\s+instructions\b/i,
     ],
   },
   {
@@ -59,6 +59,16 @@ const PROMPT_INJECTION_RULES: SkillAuditRule[] = [
     patterns: [
       /\b(reveal|print|dump|show).{0,40}(system prompt|developer message|hidden instructions)\b/i,
       /\bwhat (were|are) your (system|developer) instructions\b/i,
+    ],
+  },
+  {
+    id: "prompt.forge-tag-injection",
+    category: "prompt_injection",
+    severity: "block",
+    message: "Skill contains Forge authority tag patterns that would break the prompt context wrapper.",
+    appliesTo: ["markdown", "code", "support"],
+    patterns: [
+      /<\/(forge_skill_file|forge_skill_context)[^>]*>/i,
     ],
   },
 ];
