@@ -1,5 +1,5 @@
 import { execSync } from "child_process";
-import { BaseAgent, AgentResult } from "./base.js";
+import { BaseAgent, AgentResult, type AgentRunOptions } from "./base.js";
 import { ModelTier } from "../router.js";
 
 const DEPLOY_CMDS: Record<string, string[]> = {
@@ -28,7 +28,8 @@ export class DeployAgent extends BaseAgent {
           content: `Deploy target: ${target}\nSuggested command: ${cmd.join(" ")}\nArchitecture:\n${args["architecture"]}\n\nWorkspace root: ${workspace}`,
         },
       ];
-      const output = await this.runAgenticLoop(messages, workspace);
+      const opts: AgentRunOptions = { skillContext: args["skillContext"] as AgentRunOptions["skillContext"] };
+      const output = await this.runAgenticLoop(messages, workspace, undefined, opts);
       return { success: true, output: output || `Deploy attempted for ${target}` };
     }
 

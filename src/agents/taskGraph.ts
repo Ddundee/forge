@@ -1,4 +1,4 @@
-import { BaseAgent, AgentResult } from "./base.js";
+import { BaseAgent, AgentResult, type AgentRunOptions } from "./base.js";
 import { ModelTier } from "../router.js";
 import { normalizeTaskGraph } from "../taskGraphValidation.js";
 
@@ -24,7 +24,8 @@ export class TaskGraphAgent extends BaseAgent {
       { role: "system", content: SYSTEM },
       { role: "user", content: `Spec:\n${args["spec"]}\n\nArchitecture:\n${args["architecture"]}` },
     ];
-    const response = await this.call(messages);
+    const opts: AgentRunOptions = { skillContext: args["skillContext"] as AgentRunOptions["skillContext"] };
+    const response = await this.call(messages, undefined, opts);
     let parsed: unknown;
     try {
       parsed = JSON.parse(this.extractJson(response));

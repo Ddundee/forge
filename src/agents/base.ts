@@ -14,6 +14,17 @@ import {
   externalAgentFor,
   externalAgentLabel,
 } from "../externalAgents.js";
+import { SKILL_TOOL_DEFINITIONS } from "../skills/toolDefinitions.js";
+import {
+  type SkillContextRuntime,
+  isSkillTool,
+  executeSkillTool,
+  summarizeSkillToolResult,
+} from "../skills/toolExecutor.js";
+
+export interface AgentRunOptions {
+  skillContext?: SkillContextRuntime;
+}
 
 export interface AgentResult {
   success: boolean;
@@ -98,6 +109,16 @@ export abstract class BaseAgent {
     return system ? `${system}\n\n---\n\n${body}` : body;
   }
 
+  private prepareMessagesWithSkillContext(
+    messages: CoreMessage[],
+    skillContext: SkillContextRuntime | undefined,
+  ): CoreMessage[] {
+    if (!skillContext) return messages;
+    const rendered = skillContext.provider.renderCompact(skillContext.request);
+    if (rendered.charCount === 0) return messages;
+    return [...messages, { role: "system" as const, content: rendered.content }];
+  }
+
   private async runViaExternalAgent(
     id: ExternalAgentId,
     messages: CoreMessage[],
@@ -119,12 +140,17 @@ export abstract class BaseAgent {
     return result;
   }
 
-  protected async call(messages: CoreMessage[], taskId?: string): Promise<string> {
+  protected async call(
+    messages: CoreMessage[],
+    taskId?: string,
+    options: AgentRunOptions = {},
+  ): Promise<string> {
+    const prepared = this.prepareMessagesWithSkillContext(messages, options.skillContext);
     const externalAgent = this.externalAgentMode();
     if (externalAgent) {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `forge-${externalAgent}-`));
       try {
-        return await this.runViaExternalAgent(externalAgent, messages, tmpDir, taskId);
+        return await this.runViaExternalAgent(externalAgent, prepared, tmpDir, taskId);
       } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });
       }
@@ -134,7 +160,7 @@ export abstract class BaseAgent {
     const model = modelOverride ?? this.router.modelFor(this.tier);
     this.db.logEvent(this.sessionId, "LLM_CALL", `${this.constructor.name} → ${model}`);
     this.onLiveEvent?.("llm", `${this.constructor.name} → ${model}`);
-    const result = await this.router.complete(this.tier, messages, 120_000, modelOverride);
+    const result = await this.router.complete(this.tier, prepared, 120_000, modelOverride);
     this.db.logLlmCall(this.sessionId, { ...result, response: result.content }, taskId);
     return result.content;
   }
@@ -143,11 +169,17 @@ export abstract class BaseAgent {
     messages: CoreMessage[],
     workspace: string,
     taskId?: string,
+    options: AgentRunOptions = {},
   ): Promise<string> {
+    const prepared = this.prepareMessagesWithSkillContext(messages, options.skillContext);
     const externalAgent = this.externalAgentMode();
     if (externalAgent) {
-      return this.runViaExternalAgent(externalAgent, messages, workspace, taskId);
+      return this.runViaExternalAgent(externalAgent, prepared, workspace, taskId);
     }
+
+    const toolDefs = options.skillContext
+      ? { ...TOOL_DEFINITIONS, ...SKILL_TOOL_DEFINITIONS }
+      : TOOL_DEFINITIONS;
 
     const modelOverride = await this.resolveAutoModel();
     let totalToolCalls = 0;
@@ -156,12 +188,12 @@ export abstract class BaseAgent {
       const model = modelOverride ?? this.router.modelFor(this.tier);
       this.db.logEvent(this.sessionId, "LLM_CALL", `${this.constructor.name} turn ${turn + 1} → ${model}`);
       this.onLiveEvent?.("llm", `${this.constructor.name} turn ${turn + 1} → ${model}`);
-      const result = await this.router.completeWithTools(this.tier, messages, TOOL_DEFINITIONS, 120_000, modelOverride);
+      const result = await this.router.completeWithTools(this.tier, prepared, toolDefs, 120_000, modelOverride);
       this.db.logLlmCall(this.sessionId, { ...result, response: result.text ?? "" }, taskId);
 
       if (!result.toolCalls.length) return result.text ?? "";
 
-      messages.push({
+      prepared.push({
         role: "assistant",
         content: [
           ...(result.text ? [{ type: "text" as const, text: result.text }] : []),
@@ -176,9 +208,14 @@ export abstract class BaseAgent {
 
       for (const tc of result.toolCalls) {
         totalToolCalls++;
-        const toolResult = totalToolCalls > MAX_TOOL_CALLS
-          ? "ERROR: Tool call limit reached. Stop and report what you have."
-          : executeTool(tc.name, tc.arguments, workspace);
+        let toolResult: string;
+        if (totalToolCalls > MAX_TOOL_CALLS) {
+          toolResult = "ERROR: Tool call limit reached. Stop and report what you have.";
+        } else if (options.skillContext && isSkillTool(tc.name)) {
+          toolResult = executeSkillTool(tc.name, tc.arguments, options.skillContext, this.db, this.sessionId);
+        } else {
+          toolResult = executeTool(tc.name, tc.arguments, workspace);
+        }
 
         if (tc.name === "bash_exec") {
           this.onLiveEvent?.("cmd", String(tc.arguments["command"] ?? "").slice(0, 80));
@@ -186,16 +223,17 @@ export abstract class BaseAgent {
           this.onLiveEvent?.("tool", fmtToolArgs(tc.name, tc.arguments));
         }
 
-        this.db.logToolCall(this.sessionId, taskId, tc.name, tc.arguments, toolResult.slice(0, 2000));
-        messages.push({
+        const logResult = summarizeSkillToolResult(tc.name, toolResult);
+        this.db.logToolCall(this.sessionId, taskId, tc.name, tc.arguments, logResult);
+        prepared.push({
           role: "tool",
           content: [{ type: "tool-result" as const, toolCallId: tc.id, toolName: tc.name, result: toolResult }],
         });
       }
     }
 
-    messages.push({ role: "user", content: "You have reached the turn limit. Summarize what you completed." });
-    const final = await this.router.completeWithTools(this.tier, messages, {}, 120_000, modelOverride);
+    prepared.push({ role: "user", content: "You have reached the turn limit. Summarize what you completed." });
+    const final = await this.router.completeWithTools(this.tier, prepared, {}, 120_000, modelOverride);
     this.db.logLlmCall(this.sessionId, { ...final, response: final.text ?? "" }, taskId);
     return final.text ?? "";
   }

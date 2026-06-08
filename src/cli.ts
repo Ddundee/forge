@@ -1,6 +1,7 @@
 #!/usr/bin/env node
-import { Command } from "commander";
-import { loadKeys } from "./config.js";
+import { Command, Option } from "commander";
+import { loadKeys, loadConfig } from "./config.js";
+import { applyBuildSkillOverrides, parseBuildSkillOptions, parseNonNegativeInt } from "./skills/cliOptions.js";
 import { Session } from "./session.js";
 import { Overseer } from "./overseer.js";
 import { startLiveFeed } from "./ui/liveFeed.js";
@@ -28,14 +29,31 @@ function makeHandlers(session: Session, feed: ReturnType<typeof startLiveFeed>) 
 
 const program = new Command("forgecli").description("Idea to product in one command.");
 
+interface BuildCommandOptions {
+  deploy?: string;
+  maxCycles: string;
+  skills?: string;
+  skillsMax?: number;
+}
+
 program
   .command("build <idea>")
   .option("-d, --deploy <target>", "Deploy target: vercel, railway, fly.io")
   .option("--max-cycles <n>", "Max fix iterations", "5")
-  .action(async (idea: string, opts: { deploy?: string; maxCycles: string }) => {
+  .addOption(new Option("--skills <mode>", "Skill usage for this build").choices(["auto", "off"]))
+  .addOption(
+    new Option("--skills-max <n>", "Maximum skills Forge may select for this build").argParser(
+      (value) => parseNonNegativeInt(value, "--skills-max"),
+    ),
+  )
+  .action(async (idea: string, opts: BuildCommandOptions) => {
     loadKeys();
     const catalog = await getCatalog().catch(() => undefined);
-    const session = Session.create(idea, opts.deploy, undefined, process.cwd(), catalog);
+    const baseConfig = loadConfig();
+    const skillOverrides = parseBuildSkillOptions({ skills: opts.skills, skillsMax: opts.skillsMax });
+    const effectiveConfig = applyBuildSkillOverrides(baseConfig, skillOverrides);
+    for (const warning of skillOverrides.warnings) console.warn(`Warning: ${warning}`);
+    const session = Session.create(idea, opts.deploy, undefined, process.cwd(), catalog, effectiveConfig);
     const feed = startLiveFeed(idea);
 
     const { onPhaseEvent, onAgentEvent } = makeHandlers(session, feed);

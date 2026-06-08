@@ -242,6 +242,42 @@ Forge can build:
 
 ---
 
+## Skills
+
+Forge can optionally use agent skills from the [skills.sh](https://www.skills.sh) ecosystem to add task-specific guidance to a build. Skills are **disabled by default** during alpha.
+
+Enable skills for one build:
+
+```bash
+forgecli build "Create a React website for a local bakery" --skills auto --skills-max 2
+```
+
+Disable skills for one build:
+
+```bash
+forgecli build "Create a landing page" --skills off
+```
+
+Persist a default in `~/.forge/config.toml`:
+
+```toml
+[skills]
+mode = "auto"
+max_skills = 2
+prompt_char_budget = 12000
+min_install_count = 100
+trusted_sources = ["vercel-labs"]
+install_targets = ["forge", "agents"]
+```
+
+Or set it interactively during `forgecli setup`.
+
+When enabled, Forge may search with `npx skills`, inspect selected skill bundles, install approved skills into the project workspace, and inject bounded guidance into agent prompts for the current session. Forge does not install skills globally by default.
+
+Read [`docs/skills.md`](docs/skills.md) for safety, privacy, troubleshooting, and rollout status.
+
+---
+
 ## Development
 
 ```bash

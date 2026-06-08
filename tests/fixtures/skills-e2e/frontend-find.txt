@@ -1,0 +1,4 @@
+Install with npx skills add <owner/repo@skill>
+
+vercel-labs/agent-skills@web-design-guidelines 120000 installs
+└ https://skills.sh/vercel-labs/agent-skills/web-design-guidelines

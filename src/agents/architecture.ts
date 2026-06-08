@@ -1,4 +1,4 @@
-import { BaseAgent, AgentResult } from "./base.js";
+import { BaseAgent, AgentResult, type AgentRunOptions } from "./base.js";
 import { ModelTier } from "../router.js";
 
 const SYSTEM = `You are a software architect. Given a product spec, choose the ideal tech stack and project structure.
@@ -22,7 +22,8 @@ export class ArchitectureAgent extends BaseAgent {
       { role: "system", content: SYSTEM },
       { role: "user", content: `Spec:\n${args["spec"]}` },
     ];
-    const response = await this.call(messages);
+    const opts: AgentRunOptions = { skillContext: args["skillContext"] as AgentRunOptions["skillContext"] };
+    const response = await this.call(messages, undefined, opts);
     try {
       const cleaned = this.extractJson(response);
       JSON.parse(cleaned);

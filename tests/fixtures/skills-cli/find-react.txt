@@ -1,0 +1,10 @@
+Install with npx skills add <owner/repo@skill>
+
+vtex/skills@vtex-io-react-apps 415 installs
+└ https://skills.sh/vtex/skills/vtex-io-react-apps
+
+hieutrtr/ai1-skills@react-frontend-expert 132 installs
+└ https://skills.sh/hieutrtr/ai1-skills/react-frontend-expert
+
+iliaal/ai-skills@react-frontend 105 installs
+└ https://skills.sh/iliaal/ai-skills/react-frontend

@@ -1,0 +1,19 @@
+You are being given a Skill to execute for the user's next request.
+
+Use the following SKILL.md as your instructions:
+
+<SKILL.md>
+---
+name: web-design-guidelines
+description: Build polished, accessible frontend applications with modern design patterns.
+---
+
+# Web Design Guidelines
+
+Follow these guidelines when building web applications.
+
+- Use semantic HTML elements for accessibility.
+- Apply responsive layout patterns with CSS Grid or Flexbox.
+- Ensure color contrast meets WCAG AA standards.
+- Provide keyboard navigation support for interactive elements.
+</SKILL.md>

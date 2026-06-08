@@ -1,4 +1,4 @@
-import { BaseAgent, AgentResult } from "./base.js";
+import { BaseAgent, AgentResult, type AgentRunOptions } from "./base.js";
 import { ModelTier } from "../router.js";
 
 const SYSTEM = `You are a test engineer. Write tests for this project and make them pass.
@@ -35,7 +35,8 @@ export class TestAgent extends BaseAgent {
       { role: "system", content: SYSTEM },
       { role: "user", content: `Test framework: ${framework}\nWorkspace root: ${workspace}` },
     ];
-    const summary = await this.runAgenticLoop(messages, workspace);
+    const opts: AgentRunOptions = { skillContext: args["skillContext"] as AgentRunOptions["skillContext"] };
+    const summary = await this.runAgenticLoop(messages, workspace, undefined, opts);
     const lower = summary.toLowerCase();
     const passed = lower.includes("pass") || summary.includes("✓") || lower.includes("success") || lower.includes("all tests");
     return { success: passed, output: summary, error: passed ? undefined : "tests_failed" };

@@ -1,0 +1,22 @@
+Source: https://github.com/kepano/obsidian-skills.git
+Repository cloned
+Found 5 skills
+
+Available Skills
+
+  defuddle
+    Extract clean markdown content from web pages using Defuddle CLI...
+
+  json-canvas
+    Create and edit JSON Canvas files (.canvas)...
+
+  obsidian-bases
+    Create and edit Obsidian Bases (.base files)...
+
+  obsidian-cli
+    Interact with Obsidian vaults using the Obsidian CLI...
+
+  obsidian-markdown
+    Create and edit Obsidian Flavored Markdown...
+
+Use --skill <name> to install specific skills

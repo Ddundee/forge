@@ -1,6 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
-import { BaseAgent, AgentResult } from "./base.js";
+import { BaseAgent, AgentResult, type AgentRunOptions } from "./base.js";
 import { ModelTier } from "../router.js";
 
 const SYSTEM = `You are a senior software engineer implementing one focused coding task.
@@ -40,7 +40,8 @@ export class CodingAgent extends BaseAgent {
         content: `Task: ${taskTitle}\n\nSpec:\n${spec}\n\nArchitecture:\n${architecture}${context ? `\n\nContext from prior tasks:\n${context}` : ""}\n\nWorkspace root: ${workspace}`,
       },
     ];
-    const summary = await this.runAgenticLoop(messages, workspace, taskId);
+    const opts: AgentRunOptions = { skillContext: args["skillContext"] as AgentRunOptions["skillContext"] };
+    const summary = await this.runAgenticLoop(messages, workspace, taskId, opts);
     const written: string[] = [];
     for (const entry of this.walkWorkspace(workspace)) {
       try {

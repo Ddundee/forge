@@ -1,0 +1,15 @@
+[
+  {
+    "name": "obsidian-markdown",
+    "path": "/private/tmp/forge-skills-phase2-07JSA6/.agents/skills/obsidian-markdown",
+    "scope": "project",
+    "agents": [
+      "Antigravity",
+      "Codex",
+      "Cursor",
+      "Gemini CLI",
+      "OpenCode",
+      "Zed"
+    ]
+  }
+]

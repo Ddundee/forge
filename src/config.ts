@@ -3,6 +3,40 @@ import * as os from "os";
 import * as path from "path";
 import { parse as parseToml, stringify as stringifyToml } from "smol-toml";
 import { ModelTier, DEFAULT_MODELS } from "./router.js";
+import type { SkillConfig, SkillInstallTarget } from "./skills/types.js";
+
+export const DEFAULT_SKILL_CONFIG: SkillConfig = {
+  mode: "off",
+  maxSkills: 3,
+  promptCharBudget: 12_000,
+  minInstallCount: 100,
+  trustedSources: ["vercel-labs", "anthropics", "openai", "microsoft"],
+  installTargets: ["forge", "agents"],
+};
+
+export function normalizeSkillConfig(value: unknown): SkillConfig {
+  const data = (value && typeof value === "object") ? value as Record<string, unknown> : {};
+  const nonNegativeNumber = (raw: unknown, fallback: number): number => {
+    const parsed = Number(raw ?? fallback);
+    return Number.isFinite(parsed) ? Math.max(0, parsed) : fallback;
+  };
+  const installTargets = Array.isArray(data["install_targets"])
+    ? data["install_targets"].map(String).filter((v): v is SkillInstallTarget =>
+        v === "forge" || v === "agents" || v === "claude"
+      )
+    : DEFAULT_SKILL_CONFIG.installTargets;
+
+  return {
+    mode: data["mode"] === "auto" ? "auto" : "off",
+    maxSkills: nonNegativeNumber(data["max_skills"], DEFAULT_SKILL_CONFIG.maxSkills),
+    promptCharBudget: nonNegativeNumber(data["prompt_char_budget"], DEFAULT_SKILL_CONFIG.promptCharBudget),
+    minInstallCount: nonNegativeNumber(data["min_install_count"], DEFAULT_SKILL_CONFIG.minInstallCount),
+    trustedSources: Array.isArray(data["trusted_sources"])
+      ? data["trusted_sources"].map(String).filter(Boolean)
+      : DEFAULT_SKILL_CONFIG.trustedSources,
+    installTargets: installTargets.length > 0 ? installTargets : DEFAULT_SKILL_CONFIG.installTargets,
+  };
+}
 
 export const CONFIG_DIR = path.join(os.homedir(), ".forge");
 export const CONFIG_FILE = path.join(CONFIG_DIR, "config.toml");
@@ -48,7 +82,37 @@ export class ForgeConfig {
     public maxCycles = 5,
     public priority: "quality" | "speed" | "cost" = "quality",
     public autoOverseer = "",
+    public skills: SkillConfig = DEFAULT_SKILL_CONFIG,
   ) {}
+
+  withSkills(skills: SkillConfig): ForgeConfig {
+    return new ForgeConfig(
+      this.profile,
+      { ...this.models },
+      this.maxCycles,
+      this.priority,
+      this.autoOverseer,
+      skills,
+    );
+  }
+
+  toJson(): Record<string, unknown> {
+    return {
+      profile: this.profile,
+      models: this.models,
+      max_cycles: this.maxCycles,
+      priority: this.priority,
+      auto_overseer: this.autoOverseer,
+      skills: {
+        mode: this.skills.mode,
+        max_skills: this.skills.maxSkills,
+        prompt_char_budget: this.skills.promptCharBudget,
+        min_install_count: this.skills.minInstallCount,
+        trusted_sources: this.skills.trustedSources,
+        install_targets: this.skills.installTargets,
+      },
+    };
+  }
 
   tierModels(): Record<ModelTier, string> {
     const base = { ...(PROVIDER_PROFILES[this.profile] ?? PROVIDER_PROFILES["claude-primary"]) };
@@ -70,18 +134,13 @@ export function loadConfig(configFile = CONFIG_FILE): ForgeConfig {
     data.max_cycles ?? 5,
     (data.priority as "quality" | "speed" | "cost") ?? "quality",
     data.auto_overseer ?? "",
+    normalizeSkillConfig(data.skills),
   );
 }
 
 export function saveConfig(cfg: ForgeConfig, configFile = CONFIG_FILE): void {
   fs.mkdirSync(path.dirname(configFile), { recursive: true });
-  fs.writeFileSync(configFile, stringifyToml({
-    profile: cfg.profile,
-    models: cfg.models,
-    max_cycles: cfg.maxCycles,
-    priority: cfg.priority,
-    auto_overseer: cfg.autoOverseer,
-  }));
+  fs.writeFileSync(configFile, stringifyToml(cfg.toJson()));
 }
 
 export function saveKeys(keys: Record<string, string>, keysFile = KEYS_FILE): void {
@@ -100,7 +159,8 @@ export function loadKeys(keysFile = KEYS_FILE): void {
 }
 
 export async function runSetupWizard(): Promise<ForgeConfig> {
-  const { select, checkbox, password } = await import("@inquirer/prompts");
+  const { select, checkbox, password, input } = await import("@inquirer/prompts");
+  const { configureSkillsForSetup } = await import("./skills/setup.js");
 
   console.log("\n⚒  FORGE  —  idea to product in one command\n");
 
@@ -167,7 +227,11 @@ export async function runSetupWizard(): Promise<ForgeConfig> {
           { name: "Claude Code CLI", value: "claude-code" },
         ],
       }) as string;
-    const cfg = new ForgeConfig(profile, {}, 5, priority);
+    let cfg = new ForgeConfig(profile, {}, 5, priority);
+    cfg = await configureSkillsForSetup(cfg, { select, checkbox, input }, {
+      selectedProfile: cfg.profile,
+      output: console,
+    });
     saveConfig(cfg);
     console.log("OK  Configuration saved to ~/.forge/config.toml\n");
     return cfg;
@@ -216,7 +280,11 @@ export async function runSetupWizard(): Promise<ForgeConfig> {
       message: "Pick the overseer model (the AI that will decide all other models):",
       choices: allModelChoices,
     }) as string;
-    const cfg = new ForgeConfig("auto", {}, 5, priority, overseer);
+    let cfg = new ForgeConfig("auto", {}, 5, priority, overseer);
+    cfg = await configureSkillsForSetup(cfg, { select, checkbox, input }, {
+      selectedProfile: cfg.profile,
+      output: console,
+    });
     saveConfig(cfg);
     if (Object.keys(keys).length) saveKeys(keys);
     console.log("\n✓ Configuration saved to ~/.forge/config.toml\n");
@@ -239,7 +307,11 @@ export async function runSetupWizard(): Promise<ForgeConfig> {
   const profile = providers.includes("Anthropic (Claude)") ? "claude-primary"
     : providers.includes("OpenAI") ? "openai-primary" : "claude-primary";
 
-  const cfg = new ForgeConfig(profile, chosenModels, 5, priority);
+  let cfg = new ForgeConfig(profile, chosenModels, 5, priority);
+  cfg = await configureSkillsForSetup(cfg, { select, checkbox, input }, {
+    selectedProfile: cfg.profile,
+    output: console,
+  });
   saveConfig(cfg);
   if (Object.keys(keys).length) saveKeys(keys);
   console.log("\n✓ Configuration saved to ~/.forge/config.toml\n");
