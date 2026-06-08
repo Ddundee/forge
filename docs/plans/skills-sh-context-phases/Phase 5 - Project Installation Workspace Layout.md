@@ -20,7 +20,6 @@ updated: 2026-06-07
 
 > [!warning] Scope Boundary
 > Phase 5 installs already-audited skills into the generated project workspace and verifies the files. It must not discover new skills, score candidates, make audit decisions, inject prompts, or decide pipeline timing.
-
 > [!abstract] Outcome
 > At the end of Phase 5, Forge can take Phase 4 `pass` skills, install copied project-scope skill files into deterministic workspace paths, verify every expected path, roll back partial installs, record installation attempts, and expose a normalized installed-skill inventory for Phase 6.
 

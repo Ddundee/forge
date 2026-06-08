@@ -200,6 +200,7 @@ export class SkillsCli {
         cwd,
         env: makeSkillsEnv(this.options.env),
         stdio: ["ignore", "pipe", "pipe"],
+        detached: process.platform !== "win32",
       });
 
       let stdout = "";
@@ -218,7 +219,11 @@ export class SkillsCli {
       };
 
       timer = setTimeout(() => {
-        child.kill("SIGTERM");
+        if (process.platform !== "win32" && child.pid != null) {
+          try { process.kill(-child.pid, "SIGTERM"); } catch { child.kill("SIGTERM"); }
+        } else {
+          child.kill("SIGTERM");
+        }
         finish(() => reject(new SkillsCliError(`skills timed out after ${timeoutMs / 1000}s`)));
       }, timeoutMs);
 

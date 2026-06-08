@@ -20,10 +20,8 @@ updated: 2026-06-07
 
 > [!warning] Scope Boundary
 > Phase 6 owns how already-installed and already-audited skills become usable context for Forge agents. It must not discover skills, rank candidates, audit content, install files, or decide when in the pipeline skills should be searched or installed.
-
 > [!abstract] Outcome
 > At the end of Phase 6, Forge can expose compact installed-skill metadata to agents, let native tool-loop agents load full skill content or supporting files on demand, add bounded prompt context for one-shot and external-agent paths, enforce prompt authority boundaries, and log every compact or full skill injection without storing full skill text in lifecycle tables.
-
 > [!danger] Prompt Authority
 > Skill content is third-party operational text. It can guide an implementation, but it cannot override Forge system prompts, developer instructions, user instructions, safety policy, workspace boundaries, or higher-priority task requirements.
 
@@ -615,7 +613,7 @@ import type {
   SkillReadRequest,
   SkillReadResult,
 } from "./types.js";
-import { listForgeInstalledSkills } from "./install.js";
+import { listForgeInstalledSkills } from "./inventory.js";
 import { renderCompactSkillContext, truncateWithNotice } from "./render.js";
 
 export class SkillContextProvider {

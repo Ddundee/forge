@@ -58,7 +58,7 @@ When skills are enabled and a skill is approved, Forge may write:
 
 These files are project-local. They can be committed if your team wants deterministic skill behavior across environments. Review them before committing — they are third-party content.
 
-To remove all installed skills: `rm -rf .forge/skills .agents/skills skills-lock.json`
+To remove all installed skills: `rm -rf .forge/skills .agents/skills .claude/skills skills-lock.json`
 
 ---
 
@@ -70,7 +70,7 @@ mode = "auto"              # "auto" enables the pipeline; "off" disables it
 max_skills = 3             # maximum skills to select per build
 prompt_char_budget = 12000 # maximum characters of skill context per agent prompt
 min_install_count = 100    # minimum install count to consider a skill (popularity filter)
-trusted_sources = ["vercel-labs"]  # sources that get a trust bonus in scoring
+trusted_sources = ["vercel-labs", "anthropics", "openai", "microsoft"]  # sources that get a trust bonus in scoring
 install_targets = ["forge", "agents"]  # where to install approved skills
 ```
 
@@ -80,7 +80,7 @@ install_targets = ["forge", "agents"]  # where to install approved skills
 | `max_skills` | `3` | Higher values increase discovery time and prompt size |
 | `prompt_char_budget` | `12000` | Per-agent cap; skills are trimmed to fit |
 | `min_install_count` | `100` | Set to `0` to allow any skill; higher values reduce noise |
-| `trusted_sources` | `["vercel-labs"]` | Source owners/repos that score higher in ranking |
+| `trusted_sources` | `["vercel-labs", "anthropics", "openai", "microsoft"]` | Source owners/repos that score higher in ranking |
 | `install_targets` | `["forge", "agents"]` | `"claude"` adds `.claude/skills` for Claude Code agents |
 
 ---
@@ -142,5 +142,5 @@ mode = "off"
 
 Remove installed skill files:
 ```bash
-rm -rf .forge/skills .agents/skills skills-lock.json
+rm -rf .forge/skills .agents/skills .claude/skills skills-lock.json
 ```

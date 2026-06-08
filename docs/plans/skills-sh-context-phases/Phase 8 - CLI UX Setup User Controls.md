@@ -20,10 +20,8 @@ updated: 2026-06-07
 
 > [!warning] Planning Boundary
 > Phase 8 exposes user controls for an already-designed skill pipeline. It must not redesign discovery, ranking, auditing, installation, prompt injection, or pipeline timing.
-
 > [!abstract] Outcome
 > At the end of Phase 8, users can explicitly control whether Forge uses skills during a build, cap the number of skills selected for a build, opt into skills from setup with clear trust and telemetry copy, and understand the planned future `forgecli skills` command group without changing the alpha rollout defaults.
-
 > [!danger] Default Safety
 > Skills remain disabled by default in alpha. A user must opt in through setup or pass `--skills auto` for a build. This avoids surprise network calls, project dot-directory writes, and third-party instruction use.
 

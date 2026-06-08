@@ -20,10 +20,8 @@ updated: 2026-06-07
 
 > [!warning] Planning Boundary
 > Phase 7 decides when Forge should run the skill lifecycle and which agents should receive skill context. It must not redesign the skills CLI adapter, candidate scoring, audit rules, install layout, or progressive-disclosure renderer owned by prior phases.
-
 > [!abstract] Outcome
 > At the end of Phase 7, Forge has a low-noise skill pipeline coordinator that runs discovery, audit, install, and context preparation at deliberate phase gates; injects task-relevant skill context into the right agents; handles external-agent isolated workspaces; reuses prior selections across cycles and resumes; and emits concise live feed events for selected, skipped, installed, and injected skills.
-
 > [!danger] Noise Constraint
 > The skill pipeline must never call `skills.sh` search from inside an agent tool loop or for every individual model turn. Discovery happens at bounded pipeline moments only.
 

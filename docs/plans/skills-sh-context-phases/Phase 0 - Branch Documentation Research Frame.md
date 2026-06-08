@@ -20,7 +20,6 @@ updated: 2026-06-07
 
 > [!warning] Planning Boundary
 > Phase 0 is documentation and research infrastructure only. It must not add feature runtime code, CLI behavior, database schema, config fields, or skills.sh adapter code.
-
 > [!abstract] Outcome
 > At the end of Phase 0, the feature has a clean branch, a master plan, an Obsidian-readable planning vault structure, a phase tracker, and a documented research process that every later phase must follow before code edits.
 
@@ -99,8 +98,8 @@ Findings:
 
 Installed skills used:
 
-- `obsidian-markdown`: `/Users/dhanushchilakala/.codex/skills/obsidian-markdown/SKILL.md`
-- `obsidian-bases`: `/Users/dhanushchilakala/.codex/skills/obsidian-bases/SKILL.md`
+- `obsidian-markdown`: `<VAULT_ROOT>/.codex/skills/obsidian-markdown/SKILL.md`
+- `obsidian-bases`: `<VAULT_ROOT>/.codex/skills/obsidian-bases/SKILL.md`
 
 Relevant conventions from `obsidian-markdown`:
 
@@ -121,7 +120,7 @@ Relevant conventions from `obsidian-bases`:
 Vault target:
 
 ```text
-/Users/dhanushchilakala/home/vault/forgecli
+<VAULT_ROOT>/forgecli
 ```
 
 Phase 0 vault files:

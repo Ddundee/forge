@@ -264,7 +264,7 @@ export async function auditSelectedSkills(
         candidateKey: `${item.candidate.packageRef}@${item.candidate.skillName}`,
         findings: [{
           id: "fetch.error",
-          category: "support_file",
+          category: "network",
           severity: "block",
           message: `Failed to fetch or parse skill bundle: ${msg}`,
           location: "orchestrator",

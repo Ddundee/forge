@@ -30,7 +30,6 @@ The feature lives on branch `feature/skills-sh-context`.
 
 > [!warning] Research Gate
 > This note is the master map only. Do not implement from it directly. Each phase note must be expanded with targeted research and implementation-ready detail before code edits.
-
 > [!tip] Vault Navigation
 > Use [[Skills.sh Context System Phases|the phase tracker]] to view phase status in Obsidian Bases. Phase notes live under `skills-sh-context-phases/` and link back here.
 

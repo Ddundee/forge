@@ -116,7 +116,10 @@ export abstract class BaseAgent {
     if (!skillContext) return messages;
     const rendered = skillContext.provider.renderCompact(skillContext.request);
     if (rendered.charCount === 0) return messages;
-    return [...messages, { role: "system" as const, content: rendered.content }];
+    const skillMessage = { role: "system" as const, content: rendered.content };
+    const firstNonSystemIdx = messages.findIndex((m) => m.role !== "system");
+    const insertAt = firstNonSystemIdx === -1 ? messages.length : firstNonSystemIdx;
+    return [...messages.slice(0, insertAt), skillMessage, ...messages.slice(insertAt)];
   }
 
   private async runViaExternalAgent(

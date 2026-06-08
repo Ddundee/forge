@@ -394,7 +394,7 @@ Phase 4 must fail a skill when any of these are detected:
 | Direct exfiltration | Uploads secrets, credentials, source tree, logs, prompt text, or arbitrary files to unrelated endpoints |
 | Destructive command | Deletes home/root/workspace broadly, formats disks, changes ownership broadly, or kills unrelated processes |
 | Privilege escalation | Uses `sudo`, modifies system directories, installs persistence, or changes shell startup files |
-| Remote code execution bootstrap | Executes unverified remote scripts such as `curl ... | bash` from community sources |
+| Remote code execution bootstrap | Executes unverified remote scripts such as `curl ... \| bash` from community sources |
 | Malware persistence | Writes cron jobs, launch agents, shell profiles, npm lifecycle backdoors, or git hooks without clear user request |
 | Supply-chain takeover | Instructs publishing packages, force-pushing, changing remotes, or adding deploy keys without explicit user approval |
 | Symlink/path escape | Support files escape the support directory through symlinks or path traversal |
@@ -1069,8 +1069,8 @@ export const OPERATIONAL_WARNING_RULES: SkillAuditRule[] = [
 
 ```typescript
 function sourceIsTrusted(candidate: SkillCandidate, config: SkillConfig): boolean {
-  const owner = candidate.sourceOwner.toLowerCase();
   const packageRef = candidate.packageRef.toLowerCase();
+  const owner = packageRef.split("/")[0] ?? "";
   return config.trustedSources.some((source) => {
     const normalized = source.toLowerCase();
     return owner === normalized || packageRef.startsWith(`${normalized}/`);
@@ -1186,7 +1186,6 @@ export function auditSkillBundle(input: SkillAuditInput): DetailedSkillAuditResu
   return {
     verdict,
     reasons: auditReasons(findings),
-    checkedAt: new Date().toISOString(),
     candidateKey: `${input.candidate.packageRef}@${input.candidate.skillName}`,
     findings,
     summary: summarizeAudit(verdict, findings),

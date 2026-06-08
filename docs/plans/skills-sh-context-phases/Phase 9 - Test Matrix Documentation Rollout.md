@@ -20,10 +20,8 @@ updated: 2026-06-07
 
 > [!warning] Planning Boundary
 > Phase 9 validates and documents the skills feature after the behavior from [[Phase 1 - Skill Model Config Session Persistence]], [[Phase 2 - Vercel Skills CLI Adapter]], [[Phase 3 - Query Planning Ranking Selection]], [[Phase 4 - Skill Audit Trust Policy]], [[Phase 5 - Project Installation Workspace Layout]], [[Phase 6 - Prompt Injection Progressive Disclosure]], [[Phase 7 - Pipeline Timing Agent Behavior]], and [[Phase 8 - CLI UX Setup User Controls]] exists. It should not redesign discovery, ranking, audit policy, install layout, prompt rendering, pipeline timing, or user controls.
-
 > [!abstract] Outcome
 > At the end of Phase 9, Forge has a repeatable validation matrix for the full skills-backed context system, deterministic fake `skills` CLI integration tests, README coverage for setup and usage, safety and privacy notes, troubleshooting guidance, and explicit alpha, beta, and default-on rollout gates.
-
 > [!danger] Release Safety
 > Skills remain disabled by default for alpha. Default-on behavior is not allowed until the default-on criteria in this note are satisfied and reviewed against real dogfood evidence.
 
