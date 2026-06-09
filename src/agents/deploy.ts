@@ -1,6 +1,8 @@
-import { execSync } from "child_process";
+import { exec } from "child_process";
 import { BaseAgent, AgentResult, type AgentRunOptions } from "./base.js";
 import { ModelTier } from "../router.js";
+
+const DEPLOY_TIMEOUT_MS = 600_000;
 
 const DEPLOY_CMDS: Record<string, string[]> = {
   vercel: ["vercel", "--yes"],
@@ -33,11 +35,17 @@ export class DeployAgent extends BaseAgent {
       return { success: true, output: output || `Deploy attempted for ${target}` };
     }
 
-    try {
-      const output = execSync(cmd.join(" "), { cwd: workspace, encoding: "utf8", stdio: "pipe" });
-      return { success: true, output };
-    } catch (e: any) {
-      return { success: false, output: (e.stdout ?? "") + (e.stderr ?? ""), error: "deploy_failed" };
-    }
+    // Async with a hard timeout: execSync would block the event loop (and the
+    // live UI) indefinitely if the deploy CLI hangs or prompts for input.
+    return new Promise<AgentResult>((resolve) => {
+      exec(
+        cmd.join(" "),
+        { cwd: workspace, encoding: "utf8", timeout: DEPLOY_TIMEOUT_MS, maxBuffer: 10 * 1024 * 1024 },
+        (err, stdout, stderr) => {
+          if (!err) resolve({ success: true, output: stdout });
+          else resolve({ success: false, output: (stdout ?? "") + (stderr ?? ""), error: "deploy_failed" });
+        },
+      );
+    });
   }
 }
