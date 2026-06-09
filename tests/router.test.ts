@@ -42,7 +42,15 @@ test("complete returns CallResult with text and token counts", async () => {
 });
 
 test("complete rejects after timeout", async () => {
-  mockGenerateText.mockImplementation(() => new Promise(r => setTimeout(r, 10_000)));
+  mockGenerateText.mockImplementation(({ abortSignal }: { abortSignal?: AbortSignal }) =>
+    new Promise((_, reject) => {
+      const id = setTimeout(() => {}, 10_000);
+      abortSignal?.addEventListener("abort", () => {
+        clearTimeout(id);
+        reject(Object.assign(new Error("The operation was aborted"), { name: "AbortError" }));
+      });
+    })
+  );
   const router = new LLMRouter();
   await expect(
     router.complete(ModelTier.FAST, [{ role: "user", content: "hi" }], 50)

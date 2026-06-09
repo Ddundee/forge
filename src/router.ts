@@ -83,19 +83,21 @@ export class LLMRouter {
   async complete(tier: ModelTier, messages: CoreMessage[], timeoutMs = 120_000, modelOverride?: string): Promise<CallResult> {
     const modelId = modelOverride ?? this.models[tier];
     const model = this.resolveModel(modelId);
-    const call = generateText({ model, messages });
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new LLMTimeoutError(timeoutMs / 1000, modelId)), timeoutMs)
-    );
-    const result = await Promise.race([call, timeout]);
-    const mdModel = this.catalog ? findModel(this.catalog, modelId) : undefined;
-    return {
-      content: result.text,
-      model: modelId,
-      tokensIn: result.usage.promptTokens,
-      tokensOut: result.usage.completionTokens,
-      costUsd: calcCost(mdModel, result.usage.promptTokens, result.usage.completionTokens),
-    };
+    const signal = AbortSignal.timeout(timeoutMs);
+    try {
+      const result = await generateText({ model, messages, abortSignal: signal });
+      const mdModel = this.catalog ? findModel(this.catalog, modelId) : undefined;
+      return {
+        content: result.text,
+        model: modelId,
+        tokensIn: result.usage.promptTokens,
+        tokensOut: result.usage.completionTokens,
+        costUsd: calcCost(mdModel, result.usage.promptTokens, result.usage.completionTokens),
+      };
+    } catch (err) {
+      if (signal.aborted) throw new LLMTimeoutError(timeoutMs / 1000, modelId);
+      throw err;
+    }
   }
 
   async completeWithTools(
@@ -107,25 +109,27 @@ export class LLMRouter {
   ): Promise<LoopResult> {
     const modelId = modelOverride ?? this.models[tier];
     const model = this.resolveModel(modelId);
-    const call = generateText({ model, messages, tools: tools as any, toolChoice: "auto" });
-    const timeout = new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new LLMTimeoutError(timeoutMs / 1000, modelId)), timeoutMs)
-    );
-    const result = await Promise.race([call, timeout]);
-    const toolCalls: ToolCall[] = (result.toolCalls ?? []).map((tc: any) => ({
-      id: tc.toolCallId,
-      name: tc.toolName,
-      arguments: tc.args ?? {},
-    }));
-    const mdModel = this.catalog ? findModel(this.catalog, modelId) : undefined;
-    return {
-      text: result.text || null,
-      toolCalls,
-      model: modelId,
-      tokensIn: result.usage.promptTokens,
-      tokensOut: result.usage.completionTokens,
-      costUsd: calcCost(mdModel, result.usage.promptTokens, result.usage.completionTokens),
-    };
+    const signal = AbortSignal.timeout(timeoutMs);
+    try {
+      const result = await generateText({ model, messages, tools: tools as any, toolChoice: "auto", abortSignal: signal });
+      const toolCalls: ToolCall[] = (result.toolCalls ?? []).map((tc: any) => ({
+        id: tc.toolCallId,
+        name: tc.toolName,
+        arguments: tc.args ?? {},
+      }));
+      const mdModel = this.catalog ? findModel(this.catalog, modelId) : undefined;
+      return {
+        text: result.text || null,
+        toolCalls,
+        model: modelId,
+        tokensIn: result.usage.promptTokens,
+        tokensOut: result.usage.completionTokens,
+        costUsd: calcCost(mdModel, result.usage.promptTokens, result.usage.completionTokens),
+      };
+    } catch (err) {
+      if (signal.aborted) throw new LLMTimeoutError(timeoutMs / 1000, modelId);
+      throw err;
+    }
   }
 
   private resolveModel(modelId: string) {

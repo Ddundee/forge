@@ -23,35 +23,61 @@ export class CodexDriver {
       const child = spawn(
         "codex",
         ["exec", "--dangerously-bypass-approvals-and-sandbox", taskArg],
-        { cwd: workdir, env: process.env, stdio: ["ignore", "pipe", "pipe"] },
+        { cwd: workdir, env: process.env, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" },
       );
 
       let stdout = "";
       let stderr = "";
+      let settled = false;
+      let timer: ReturnType<typeof setTimeout> | undefined;
       child.stdout.on("data", (d: Buffer) => { stdout += d.toString(); });
       child.stderr.on("data", (d: Buffer) => { stderr += d.toString(); });
 
-      const timer = setTimeout(() => {
-        child.kill("SIGTERM");
-        reject(new Error(`Codex timed out after ${timeoutMs / 1000}s`));
+      const finish = (fn: () => void) => {
+        if (settled) return;
+        settled = true;
+        if (timer) clearTimeout(timer);
+        fn();
+      };
+
+      timer = setTimeout(() => {
+        try {
+          if (process.platform !== "win32" && child.pid) {
+            process.kill(-child.pid, "SIGTERM");
+          } else {
+            child.kill("SIGTERM");
+          }
+        } catch {}
+        setTimeout(() => {
+          try {
+            if (process.platform !== "win32" && child.pid) {
+              process.kill(-child.pid, "SIGKILL");
+            } else {
+              child.kill("SIGKILL");
+            }
+          } catch {}
+        }, 3000);
+        finish(() => reject(new Error(`Codex timed out after ${timeoutMs / 1000}s`)));
       }, timeoutMs);
 
       child.on("error", (err) => {
-        clearTimeout(timer);
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-          reject(new Error("codex CLI not found — install it with: npm install -g @openai/codex"));
-        } else {
-          reject(err);
-        }
+        finish(() => {
+          if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+            reject(new Error("codex CLI not found — install it with: npm install -g @openai/codex"));
+          } else {
+            reject(err);
+          }
+        });
       });
 
       child.on("close", (code) => {
-        clearTimeout(timer);
-        if (code !== 0) {
-          reject(new Error(`codex exited ${code}: ${stderr.slice(0, 500)}`));
-        } else {
-          resolve(stdout);
-        }
+        finish(() => {
+          if (code !== 0) {
+            reject(new Error(`codex exited ${code}: ${stderr.slice(0, 500)}`));
+          } else {
+            resolve(stdout);
+          }
+        });
       });
     });
   }

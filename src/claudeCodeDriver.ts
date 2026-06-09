@@ -97,7 +97,7 @@ export class ClaudeCodeDriver {
       const child = spawn(
         "claude",
         args,
-        { cwd: workdir, env: process.env, stdio: ["ignore", "pipe", "pipe"] },
+        { cwd: workdir, env: process.env, stdio: ["ignore", "pipe", "pipe"], detached: process.platform !== "win32" },
       );
 
       let stdout = "";
@@ -115,7 +115,22 @@ export class ClaudeCodeDriver {
       };
 
       timer = setTimeout(() => {
-        child.kill("SIGTERM");
+        try {
+          if (process.platform !== "win32" && child.pid) {
+            process.kill(-child.pid, "SIGTERM");
+          } else {
+            child.kill("SIGTERM");
+          }
+        } catch {}
+        setTimeout(() => {
+          try {
+            if (process.platform !== "win32" && child.pid) {
+              process.kill(-child.pid, "SIGKILL");
+            } else {
+              child.kill("SIGKILL");
+            }
+          } catch {}
+        }, 3000);
         finish(() => reject(new Error(`Claude Code timed out after ${timeoutMs / 1000}s`)));
       }, timeoutMs);
 
