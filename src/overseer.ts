@@ -186,31 +186,46 @@ export class Overseer {
     const workspace = workspaceOverride ?? this.session.workspace;
     const externalAgent = externalAgentFor(this.session.router.modelFor(ModelTier.REASONING));
 
-    const skills = await this.skills.prepareForCodingTask({
-      spec: this.spec(),
-      architecture: this.arch(),
-      task: { id, title, type: String(task["type"] ?? "coding") },
-      workspace,
-      cycle: this.session.cycle,
-      externalAgent,
-    });
+    // A single failing task must not reject the parallel Promise.all batch:
+    // that would abandon sibling tasks and (in isolation mode) delete tasksDir
+    // while they are still writing to it.
+    let result: { success: boolean; output: string };
+    try {
+      const skills = await this.skills.prepareForCodingTask({
+        spec: this.spec(),
+        architecture: this.arch(),
+        task: { id, title, type: String(task["type"] ?? "coding") },
+        workspace,
+        cycle: this.session.cycle,
+        externalAgent,
+      });
 
-    this.emit(`Coding: ${title}`);
-    this.session.db.updateTask(id, { status: "in_progress" });
-    const result = await this.agent(CodingAgent).run({
-      taskTitle: title, spec: this.spec(), architecture: this.arch(),
-      workspace, taskId: id,
-      skillContext: skills.skillContext,
-    });
+      this.emit(`Coding: ${title}`);
+      this.session.db.updateTask(id, { status: "in_progress" });
+      result = await this.agent(CodingAgent).run({
+        taskTitle: title, spec: this.spec(), architecture: this.arch(),
+        workspace, taskId: id,
+        skillContext: skills.skillContext,
+      });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.session.db.updateTask(id, { status: "failed", output: message });
+      this.emit(`✗ ${title} — ${message.slice(0, 120)}`);
+      return;
+    }
     this.session.db.updateTask(id, { status: result.success ? "completed" : "failed", output: result.output });
     this.emit(`${result.success ? "✓" : "✗"} ${title}`);
-    const review = await this.agent(ReviewAgent).run({ taskTitle: title, diff: result.output });
-    if (review.success) {
-      try {
+    if (!result.success) return; // don't spend a review call on a failed task
+
+    try {
+      const review = await this.agent(ReviewAgent).run({ taskTitle: title, diff: result.output });
+      if (review.success) {
         const rv = JSON.parse(review.output);
         if (!rv.approved && rv.issues?.length) this.emit(`Review: ${rv.issues[0]}`);
         else this.emit(`Review approved: ${title}`);
-      } catch {}
+      }
+    } catch {
+      this.emit(`Review skipped: ${title}`);
     }
   }
 
