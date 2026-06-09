@@ -13,6 +13,7 @@ interface FeedRef {
   logs: LogLine[];
   phase: string;
   cycle: number;
+  maxCycles: number;
   cost: number;
   startTime: number;
 }
@@ -110,7 +111,7 @@ const TUI: React.FC<{ r: FeedRef }> = ({ r }) => {
         <Text color="dim">│ </Text>
         <Text bold color={phaseColor}>{r.phase} </Text>
         <Text color="dim">│ </Text>
-        <Text>cycle {r.cycle}/5 </Text>
+        <Text>cycle {r.cycle}/{r.maxCycles} </Text>
         <Text color="dim">│ </Text>
         <Text color="green">${r.cost.toFixed(4)} </Text>
         <Text color="dim">│ </Text>
@@ -186,13 +187,13 @@ export interface LiveFeedHandle {
   stop(): void;
 }
 
-export function startLiveFeed(idea: string): LiveFeedHandle {
+export function startLiveFeed(idea: string, maxCycles = 5): LiveFeedHandle {
   const startTime = Date.now();
 
   const r: FeedRef = {
     idea, overseerMsg: "Initializing…",
     tasks: [], logs: [],
-    phase: "IDEATION", cycle: 0, cost: 0, startTime,
+    phase: "IDEATION", cycle: 0, maxCycles, cost: 0, startTime,
   };
 
   // Switch to alternate screen buffer so the TUI doesn't scroll the shell history

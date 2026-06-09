@@ -75,7 +75,8 @@ export class Session {
     const cfg = configOverride ?? loadConfig();
     const db = new ForgeDb(path.join(sessionDir, "session.db"));
     db.createSession(idea, id, JSON.stringify(cfg.toJson()));
-    db.updateSession(id, { workspace: resolvedWorkspace });
+    // Persist max_cycles so resume doesn't silently fall back to the schema default.
+    db.updateSession(id, { workspace: resolvedWorkspace, max_cycles: cfg.maxCycles });
     if (deployTarget) db.updateSession(id, { deploy_target: deployTarget });
     const router = new LLMRouter(cfg.tierModels(), catalog);
     wireAutoSelector(router, cfg, db, id, catalog);

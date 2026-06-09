@@ -46,15 +46,21 @@ program
       (value) => parseNonNegativeInt(value, "--skills-max"),
     ),
   )
-  .action(async (idea: string, opts: BuildCommandOptions) => {
+  .action(async (idea: string, opts: BuildCommandOptions, command: Command) => {
     loadKeys();
     const catalog = await getCatalog().catch(() => undefined);
     const baseConfig = loadConfig();
     const skillOverrides = parseBuildSkillOptions({ skills: opts.skills, skillsMax: opts.skillsMax });
     const effectiveConfig = applyBuildSkillOverrides(baseConfig, skillOverrides);
+    // Only an explicit flag overrides config.toml — commander's default "5"
+    // must not clobber a user-configured max_cycles.
+    if (command.getOptionValueSource("maxCycles") !== "default") {
+      const maxCycles = parseInt(opts.maxCycles, 10);
+      if (Number.isFinite(maxCycles) && maxCycles > 0) effectiveConfig.maxCycles = maxCycles;
+    }
     for (const warning of skillOverrides.warnings) console.warn(`Warning: ${warning}`);
     const session = Session.create(idea, opts.deploy, undefined, process.cwd(), catalog, effectiveConfig);
-    const feed = startLiveFeed(idea);
+    const feed = startLiveFeed(idea, session.maxCycles);
 
     const { onPhaseEvent, onAgentEvent } = makeHandlers(session, feed);
     const overseer = new Overseer(session, onPhaseEvent, onAgentEvent);
@@ -97,7 +103,7 @@ program.command("resume [sessionId]").action(async (sessionId?: string) => {
     return;
   }
 
-  const feed = startLiveFeed(session.idea);
+  const feed = startLiveFeed(session.idea, session.maxCycles);
 
   const { onPhaseEvent, onAgentEvent } = makeHandlers(session, feed);
 
