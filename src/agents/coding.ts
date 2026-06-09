@@ -22,6 +22,13 @@ Rules:
 - Match the existing code style you observe in the workspace
 - Follow the architecture and stack decisions exactly`;
 
+// Dependency/build dirs are huge and not authored by the agent — snapshotting
+// them would write tens of thousands of artifact rows per task.
+const SKIP_DIRS = new Set([
+  "node_modules", "dist", "build", "coverage", "__pycache__", "venv", "target", "vendor",
+]);
+const MAX_ARTIFACT_BYTES = 256 * 1024;
+
 export class CodingAgent extends BaseAgent {
   protected tier = ModelTier.REASONING;
 
@@ -56,11 +63,17 @@ export class CodingAgent extends BaseAgent {
   private walkWorkspace(workspace: string): { full: string; rel: string }[] {
     const result: { full: string; rel: string }[] = [];
     const walk = (dir: string) => {
-      for (const name of fs.readdirSync(dir)) {
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const name = entry.name;
         if (name.startsWith(".")) continue;
         const full = path.join(dir, name);
-        if (fs.statSync(full).isDirectory()) walk(full);
-        else result.push({ full, rel: path.relative(workspace, full) });
+        if (entry.isDirectory()) {
+          if (!SKIP_DIRS.has(name)) walk(full);
+        } else if (entry.isFile()) {
+          if (fs.statSync(full).size <= MAX_ARTIFACT_BYTES) {
+            result.push({ full, rel: path.relative(workspace, full) });
+          }
+        }
       }
     };
     if (fs.existsSync(workspace)) walk(workspace);
