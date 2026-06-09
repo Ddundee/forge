@@ -32,8 +32,12 @@ export async function getCatalog(refresh = false): Promise<MdCatalog> {
   if (!refresh && fs.existsSync(CACHE_PATH)) {
     const age = Date.now() - fs.statSync(CACHE_PATH).mtimeMs;
     if (age < CACHE_TTL_MS) {
-      _cached = JSON.parse(fs.readFileSync(CACHE_PATH, "utf8")) as MdCatalog;
-      return _cached;
+      try {
+        _cached = JSON.parse(fs.readFileSync(CACHE_PATH, "utf8")) as MdCatalog;
+        return _cached;
+      } catch {
+        // corrupt cache file (e.g. interrupted write) — fall through to refetch
+      }
     }
   }
 
@@ -82,9 +86,23 @@ export function findModel(catalog: MdCatalog, modelId: string): MdModel | undefi
   return undefined;
 }
 
-export function calcCost(model: MdModel | undefined, tokensIn: number, tokensOut: number): number {
+export function calcCost(
+  model: MdModel | undefined,
+  tokensIn: number,
+  tokensOut: number,
+  cacheWriteTokens = 0,
+  cacheReadTokens = 0,
+): number {
   if (!model?.cost) return 0;
-  return (model.cost.input * tokensIn + model.cost.output * tokensOut) / 1_000_000;
+  // Anthropic defaults when models.dev lacks cache rates: write = 1.25x input, read = 0.1x input.
+  const cacheWriteRate = model.cost.cache_write ?? model.cost.input * 1.25;
+  const cacheReadRate = model.cost.cache_read ?? model.cost.input * 0.1;
+  return (
+    model.cost.input * tokensIn +
+    model.cost.output * tokensOut +
+    cacheWriteRate * cacheWriteTokens +
+    cacheReadRate * cacheReadTokens
+  ) / 1_000_000;
 }
 
 export function fmtCost(model: MdModel | undefined): string {
