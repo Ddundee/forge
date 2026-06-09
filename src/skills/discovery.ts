@@ -64,22 +64,37 @@ export async function discoverSkillCandidates(
   const pairs: Array<{ candidate: SkillCandidate; query: PlannedSkillQuery; candidateId: string }> = [];
   const failures: SkillDiscoveryFailure[] = [];
 
-  for (const planned of queries) {
-    const queryId = db.logSkillQuery(input.sessionId, planned.phase, planned.query, attempt);
-    let result: { query: string; candidates: SkillCandidate[]; rawOutput: string };
-    try {
-      result = await client.find(planned.query, input.workspace);
-    } catch (err) {
+  // Searches are independent CLI calls — run them concurrently and process
+  // results in planned order so ranking stays deterministic.
+  interface SearchOutcome {
+    planned: PlannedSkillQuery;
+    queryId: string;
+    result?: { query: string; candidates: SkillCandidate[]; rawOutput: string };
+    error?: unknown;
+  }
+  const searches: SearchOutcome[] = await Promise.all(
+    queries.map(async (planned): Promise<SearchOutcome> => {
+      const queryId = db.logSkillQuery(input.sessionId, planned.phase, planned.query, attempt);
+      try {
+        return { planned, queryId, result: await client.find(planned.query, input.workspace) };
+      } catch (err) {
+        return { planned, queryId, error: err };
+      }
+    }),
+  );
+
+  for (const search of searches) {
+    if (search.error !== undefined || !search.result) {
       failures.push({
-        query: planned,
-        message: err instanceof Error ? err.message : String(err),
+        query: search.planned,
+        message: search.error instanceof Error ? search.error.message : String(search.error),
         recoverable: true,
       });
       continue;
     }
-    for (const candidate of result.candidates.slice(0, maxCandidatesPerQuery)) {
-      const candidateId = db.saveSkillCandidate(input.sessionId, queryId, candidate);
-      pairs.push({ candidate, query: planned, candidateId });
+    for (const candidate of search.result.candidates.slice(0, maxCandidatesPerQuery)) {
+      const candidateId = db.saveSkillCandidate(input.sessionId, search.queryId, candidate);
+      pairs.push({ candidate, query: search.planned, candidateId });
     }
   }
 
