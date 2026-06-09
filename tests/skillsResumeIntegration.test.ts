@@ -81,8 +81,10 @@ test("loaded session round-trips promptCharBudget from snapshot", () => {
   loaded.db.close();
 });
 
-test("session created without configOverride gets default skill config", () => {
-  const created = Session.create("default config test", undefined, tmpDir);
+test("session created without configOverride stores skill config from loaded config", () => {
+  // Use an explicit config so the test is not sensitive to the user's ~/.forge/config.toml
+  const cfg = new ForgeConfig("claude-primary", {}, 5, "quality", "", skillConfig("off", 3));
+  const created = Session.create("default config test", undefined, tmpDir, undefined, undefined, cfg);
   const row = created.db.getSession(created.id);
   const snapshot = JSON.parse(String(row?.["config_json"] ?? "{}"));
   created.db.close();

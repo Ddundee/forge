@@ -18,6 +18,8 @@ import { parseSkillMarkdown } from "./bundle.js";
 import { fingerprintPlanningInput, fingerprintFailures } from "./fingerprints.js";
 import { selectRelevantSourceKeys } from "./relevance.js";
 import type { ExternalAgentId } from "../externalAgents.js";
+import { SkillsCli } from "./cli.js";
+import { externalAgentFor } from "../externalAgents.js";
 
 // --- Moment / preparation types ---
 
@@ -720,13 +722,8 @@ export function createSkillPipelineCoordinator(input: {
     return new NoopSkillPipelineCoordinator();
   }
 
-  // Import lazily to avoid loading CLI when not needed
-  /* eslint-disable @typescript-eslint/no-var-requires */
-  const { SkillsCli } = require("./cli.js") as { SkillsCli: new () => SkillSearchClient & SkillUseClient & SkillInstallClient };
-  const { externalAgentFor: extAgentFor } = require("../externalAgents.js") as { externalAgentFor: (model: string) => ExternalAgentId | undefined };
-  /* eslint-enable @typescript-eslint/no-var-requires */
   const skillsCli = new SkillsCli();
-  const externalAgent = extAgentFor(input.session.getReasoningModel());
+  const externalAgent = externalAgentFor(input.session.getReasoningModel());
 
   return new SkillPipelineCoordinator({
     sessionId: input.session.id,

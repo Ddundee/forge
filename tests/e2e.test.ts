@@ -8,6 +8,7 @@ import * as path from "path";
 import { Session } from "../src/session.js";
 import { Overseer } from "../src/overseer.js";
 import { Phase } from "../src/stateMachine.js";
+import { ForgeConfig, DEFAULT_SKILL_CONFIG } from "../src/config.js";
 
 jest.mock("../src/agents/ideation.js");
 jest.mock("../src/agents/architecture.js");
@@ -51,7 +52,8 @@ beforeAll(() => {
 afterAll(() => fs.rmSync(sessionsDir, { recursive: true }));
 
 test("full pipeline: create session → run overseer → reaches DONE", async () => {
-  const session = Session.create("build a smoke test app", undefined, sessionsDir);
+  const cfg = new ForgeConfig("claude-primary", {}, 5, "quality", "", { ...DEFAULT_SKILL_CONFIG, mode: "off" });
+  const session = Session.create("build a smoke test app", undefined, sessionsDir, undefined, undefined, cfg);
   expect(session.id).toHaveLength(8);
   expect(session.phase).toBe(Phase.IDEATION);
 
