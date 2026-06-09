@@ -25,6 +25,11 @@ function resolveModel(modelId: string) {
 }
 
 export class AutoSelector {
+  // One routing decision per agent role per session: the choice is driven by
+  // the agent role + user priority, so re-asking the overseer model on every
+  // call only adds cost and latency (and another hangable network call).
+  private cache = new Map<string, string>();
+
   constructor(
     private overseerModel: string,
     private priority: "quality" | "speed" | "cost",
@@ -34,6 +39,8 @@ export class AutoSelector {
 
   async selectModel(agentName: string, recentContext: string): Promise<string> {
     if (!this.availableModels.length) return this.overseerModel;
+    const cached = this.cache.get(agentName);
+    if (cached) return cached;
     try {
       const role = AGENT_ROLES[agentName] ?? "General LLM task in a software build pipeline";
       const prompt = `You are a model router for a multi-agent software build pipeline. Pick the optimal LLM for the current task.
@@ -57,9 +64,11 @@ Reply with ONLY the exact model ID from the list above. Nothing else.`;
       const result = await generateText({
         model: resolveModel(this.overseerModel),
         messages: [{ role: "user", content: prompt }],
+        abortSignal: AbortSignal.timeout(30_000),
       });
       const chosen = result.text.trim();
       const valid = this.availableModels.includes(chosen) ? chosen : this.availableModels[0];
+      this.cache.set(agentName, valid);
       this.logFn(`AutoSelector: ${agentName} → ${valid}`);
       return valid;
     } catch {

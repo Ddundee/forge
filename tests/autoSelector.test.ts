@@ -69,3 +69,22 @@ test("unknown agent name falls back to generic role description without throwing
   const selector = new AutoSelector("claude-opus-4-8", "quality", MODELS);
   await expect(selector.selectModel("UnknownAgent", "")).resolves.toBe(MODELS[0]);
 });
+
+test("caches the selection per agent and only asks the overseer once", async () => {
+  mockGenerate.mockResolvedValue(fakeResponse("claude-sonnet-4-6"));
+  const selector = new AutoSelector("claude-opus-4-8", "quality", MODELS);
+  await selector.selectModel("CodingAgent", "ctx1");
+  await selector.selectModel("CodingAgent", "ctx2");
+  expect(mockGenerate).toHaveBeenCalledTimes(1);
+  await selector.selectModel("ReviewAgent", "");
+  expect(mockGenerate).toHaveBeenCalledTimes(2);
+});
+
+test("does not cache the fallback after a failed selection", async () => {
+  mockGenerate.mockRejectedValueOnce(new Error("API error"));
+  mockGenerate.mockResolvedValueOnce(fakeResponse("claude-sonnet-4-6"));
+  const selector = new AutoSelector("claude-opus-4-8", "quality", MODELS);
+  expect(await selector.selectModel("CodingAgent", "")).toBe(MODELS[0]);
+  expect(await selector.selectModel("CodingAgent", "")).toBe("claude-sonnet-4-6");
+  expect(mockGenerate).toHaveBeenCalledTimes(2);
+});
