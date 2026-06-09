@@ -23,14 +23,14 @@ export const SKILL_TOOL_DEFINITIONS = {
         .describe("The source_key returned by skill_list or the compact skill context."),
       file: z
         .string()
-        .optional()
+        .nullable()
         .describe(
-          "Optional path inside the installed skill directory. Defaults to SKILL.md.",
+          "Path inside the installed skill directory. Pass null to read SKILL.md (the default).",
         ),
       max_chars: z
         .number()
-        .optional()
-        .describe("Optional lower response cap in characters."),
+        .nullable()
+        .describe("Response cap in characters. Pass null for no extra cap."),
     }),
   }),
 };

@@ -56,8 +56,8 @@ export function executeSkillTool(
 
   if (name === "skill_read") {
     const sourceKey = String(args["source_key"] ?? "");
-    const file = args["file"] === undefined ? undefined : String(args["file"]);
-    const maxChars = args["max_chars"] === undefined ? undefined : Number(args["max_chars"]);
+    const file = args["file"] == null ? undefined : String(args["file"]);
+    const maxChars = args["max_chars"] == null ? undefined : Number(args["max_chars"]);
     try {
       const result = runtime.provider.readSkill(runtime.request, { sourceKey, file, maxChars });
       const selectionId = runtime.request.selectionIdsBySourceKey[sourceKey];
