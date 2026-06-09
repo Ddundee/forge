@@ -128,6 +128,11 @@ CREATE TABLE IF NOT EXISTS skill_injections (
     char_count INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id, status);
+CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_llm_calls_session ON llm_calls(session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_tool_calls_session ON tool_calls(session_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_artifacts_session ON artifacts(session_id, file_path, version);
 CREATE INDEX IF NOT EXISTS idx_skill_queries_session ON skill_queries(session_id, attempt, created_at);
 CREATE INDEX IF NOT EXISTS idx_skill_candidates_session ON skill_candidates(session_id, query_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_skill_audits_session ON skill_audits(session_id, candidate_id, created_at);
@@ -136,7 +141,11 @@ CREATE INDEX IF NOT EXISTS idx_skill_installations_session ON skill_installation
 CREATE INDEX IF NOT EXISTS idx_skill_injections_session ON skill_injections(session_id, attempt, selection_id, created_at);
 `;
 
+// Short ids are user-facing (sessions, tasks). High-volume log tables use the
+// full UUID: 8 hex chars have ~50% collision odds by ~65k rows, and a PK
+// collision aborts the build mid-run.
 function uid(): string { return randomUUID().slice(0, 8); }
+function logId(): string { return randomUUID(); }
 function now(): string { return new Date().toISOString(); }
 function bindValue(value: unknown): any {
   if (value === undefined || value === null) return null;
@@ -160,6 +169,9 @@ export class ForgeDb {
 
   constructor(dbPath: string) {
     this.db = new DatabaseSync(dbPath);
+    // WAL keeps hot-path logging writes (events/llm_calls/tool_calls) from
+    // stalling on fsync; harmless for in-memory DBs.
+    try { this.db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;"); } catch {}
     this.db.exec(SCHEMA);
   }
 
@@ -225,7 +237,7 @@ export class ForgeDb {
   logEvent(sessionId: string, phase: string, message: string): void {
     this.db.prepare(
       "INSERT INTO events (id, session_id, timestamp, phase, message) VALUES (?, ?, ?, ?, ?)"
-    ).run(...bindValues([uid(), sessionId, now(), phase, message]));
+    ).run(...bindValues([logId(), sessionId, now(), phase, message]));
   }
 
   logLlmCall(
@@ -235,14 +247,14 @@ export class ForgeDb {
   ): void {
     this.db.prepare(
       "INSERT INTO llm_calls (id, task_id, session_id, provider, model, tokens_in, tokens_out, cost_usd, response, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run(...bindValues([uid(), taskId ?? null, sessionId, data.model.split("/")[0], data.model,
+    ).run(...bindValues([logId(), taskId ?? null, sessionId, data.model.split("/")[0], data.model,
       data.tokensIn, data.tokensOut, data.costUsd, data.response, now()]));
   }
 
   logToolCall(sessionId: string, taskId: string | undefined, toolName: string, toolArgs: unknown, toolResult: string): void {
     this.db.prepare(
       "INSERT INTO tool_calls (id, session_id, task_id, tool_name, tool_args, tool_result, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
-    ).run(...bindValues([uid(), sessionId, taskId ?? null, toolName, jsonValue(toolArgs), toolResult, now()]));
+    ).run(...bindValues([logId(), sessionId, taskId ?? null, toolName, jsonValue(toolArgs), toolResult, now()]));
   }
 
   saveArtifact(sessionId: string, filePath: string, content: string): void {
@@ -252,7 +264,7 @@ export class ForgeDb {
     const version = existing ? existing.version + 1 : 1;
     this.db.prepare(
       "INSERT INTO artifacts (id, session_id, file_path, content_snapshot, version, created_at) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(...bindValues([uid(), sessionId, filePath, content, version, now()]));
+    ).run(...bindValues([logId(), sessionId, filePath, content, version, now()]));
   }
 
   getArtifacts(sessionId: string): Record<string, unknown>[] {
@@ -265,6 +277,14 @@ export class ForgeDb {
     return this.db.prepare(
       "SELECT timestamp, phase, message FROM events WHERE session_id = ? ORDER BY timestamp"
     ).all(sessionId) as any[];
+  }
+
+  /** Last `limit` events in chronological order, without scanning the whole table. */
+  getRecentEvents(sessionId: string, limit: number): Record<string, unknown>[] {
+    const rows = this.db.prepare(
+      "SELECT timestamp, phase, message FROM events WHERE session_id = ? ORDER BY timestamp DESC LIMIT ?"
+    ).all(sessionId, Math.max(0, Math.floor(limit))) as any[];
+    return rows.reverse();
   }
 
   logSkillQuery(sessionId: string, phase: string, query: string, attempt: number, source = "skills-cli"): string {

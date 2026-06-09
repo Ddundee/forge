@@ -1,4 +1,4 @@
-import { execSync } from "child_process";
+import { exec } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -12,21 +12,35 @@ function isBlocked(command: string): boolean {
   return BLOCKED_PATTERNS.some(p => lower.includes(p));
 }
 
-function bashExec(args: Record<string, unknown>, workspace: string): string {
+function truncateOutput(text: string): string {
+  return text.length > 8000
+    ? text.slice(0, 4000) + "\n... [truncated] ...\n" + text.slice(-4000)
+    : text;
+}
+
+// Async on purpose: execSync blocks the whole event loop, freezing the live
+// UI and stalling every parallel agent's in-flight LLM call while a build or
+// install command runs.
+function bashExec(args: Record<string, unknown>, workspace: string): Promise<string> {
   const command = String(args["command"] ?? "");
   const timeout = Number(args["timeout"] ?? 60) * 1000;
-  if (!command.trim()) return "ERROR: Empty command";
-  if (isBlocked(command)) return `ERROR: Command blocked for safety: ${command}`;
-  try {
-    const stdout = execSync(command, { cwd: workspace, timeout, encoding: "utf8", stdio: "pipe" });
-    const out = stdout.length > 8000
-      ? stdout.slice(0, 4000) + "\n... [truncated] ...\n" + stdout.slice(-4000)
-      : stdout;
-    return out + "\n[exit 0]";
-  } catch (e: any) {
-    const out = (e.stdout ?? "") + (e.stderr ? `\n[stderr]\n${e.stderr}` : "");
-    return out + `\n[exit ${e.status ?? 1}]`;
-  }
+  if (!command.trim()) return Promise.resolve("ERROR: Empty command");
+  if (isBlocked(command)) return Promise.resolve(`ERROR: Command blocked for safety: ${command}`);
+  return new Promise((resolve) => {
+    exec(
+      command,
+      { cwd: workspace, timeout, encoding: "utf8", maxBuffer: 10 * 1024 * 1024 },
+      (err, stdout, stderr) => {
+        if (!err) {
+          resolve(truncateOutput(stdout) + "\n[exit 0]");
+          return;
+        }
+        const out = (stdout ?? "") + (stderr ? `\n[stderr]\n${stderr}` : "");
+        const code = typeof (err as any).code === "number" ? (err as any).code : 1;
+        resolve(truncateOutput(out) + `\n[exit ${code}]`);
+      },
+    );
+  });
 }
 
 function resolveInWorkspace(relPath: string, workspace: string): string | null {
@@ -79,7 +93,7 @@ function listDir(args: Record<string, unknown>, workspace: string): string {
   return items.length ? items.join("\n") : "(empty directory)";
 }
 
-export function executeTool(name: string, args: Record<string, unknown>, workspace: string): string {
+export async function executeTool(name: string, args: Record<string, unknown>, workspace: string): Promise<string> {
   if (name === "bash_exec") return bashExec(args, workspace);
   if (name === "read_file") return readFile(args, workspace);
   if (name === "write_file") return writeFile(args, workspace);

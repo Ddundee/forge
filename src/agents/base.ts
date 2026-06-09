@@ -75,8 +75,8 @@ export abstract class BaseAgent {
   abstract run(args: Record<string, unknown>): Promise<AgentResult>;
 
   private getRecentContext(): string {
-    const events = this.db.getEvents(this.sessionId);
-    return events.slice(-10).map(e => String(e["message"])).join(" | ").slice(-500);
+    const events = this.db.getRecentEvents(this.sessionId, 10);
+    return events.map(e => String(e["message"])).join(" | ").slice(-500);
   }
 
   protected async resolveAutoModel(): Promise<string | undefined> {
@@ -217,7 +217,7 @@ export abstract class BaseAgent {
         } else if (options.skillContext && isSkillTool(tc.name)) {
           toolResult = executeSkillTool(tc.name, tc.arguments, options.skillContext, this.db, this.sessionId);
         } else {
-          toolResult = executeTool(tc.name, tc.arguments, workspace);
+          toolResult = await executeTool(tc.name, tc.arguments, workspace);
         }
 
         if (tc.name === "bash_exec") {
