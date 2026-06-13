@@ -13,6 +13,7 @@ import { TestAgent } from "./agents/testAgent.js";
 import { VerificationAgent } from "./agents/verification.js";
 import { DeployAgent } from "./agents/deploy.js";
 import { LiveEventFn } from "./agents/base.js";
+import { ClaudeSessionManager } from "./claudeSession.js";
 import { externalAgentFor } from "./externalAgents.js";
 import { normalizeTaskGraph } from "./taskGraphValidation.js";
 import {
@@ -27,6 +28,7 @@ export class Overseer {
   private emit: (msg: string) => void;
   private liveEvent?: LiveEventFn;
   private skills: SkillPipelineCoordinator | NoopSkillPipelineCoordinator;
+  private claudeSessions: ClaudeSessionManager;
 
   constructor(
     private session: Session,
@@ -49,16 +51,23 @@ export class Overseer {
       },
       emit: this.emit,
     });
+    this.claudeSessions = new ClaudeSessionManager(
+      this.session.db, this.session.id, this.session.workspace, this.liveEvent,
+    );
   }
 
   async run(askUser?: AskUser): Promise<void> {
-    while (this.session.phase !== Phase.DONE && this.session.phase !== Phase.FAILED) {
-      await this.runPhase(askUser);
+    try {
+      while (this.session.phase !== Phase.DONE && this.session.phase !== Phase.FAILED) {
+        await this.runPhase(askUser);
+      }
+    } finally {
+      await this.claudeSessions.closeAll();
     }
   }
 
   private agent<T>(Cls: new (...args: any[]) => T): T {
-    return new Cls(this.session.router, this.session.db, this.session.id, this.liveEvent);
+    return new Cls(this.session.router, this.session.db, this.session.id, this.liveEvent, this.claudeSessions);
   }
 
   private spec(): string { return String(this.session.db.getSession(this.session.id)?.["spec"] ?? "{}"); }
@@ -212,6 +221,10 @@ export class Overseer {
       this.session.db.updateTask(id, { status: "failed", output: message });
       this.emit(`✗ ${title} — ${message.slice(0, 120)}`);
       return;
+    } finally {
+      // The worker session's job (coding this task in its isolated dir) is done
+      // once CodingAgent returns; the review below runs on the main session.
+      await this.claudeSessions.closeWorker(id);
     }
     this.session.db.updateTask(id, { status: result.success ? "completed" : "failed", output: result.output });
     this.emit(`${result.success ? "✓" : "✗"} ${title}`);
