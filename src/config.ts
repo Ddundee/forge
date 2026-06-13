@@ -158,6 +158,11 @@ export function loadKeys(keysFile = KEYS_FILE): void {
   }
 }
 
+/**
+ * Runs an interactive setup wizard to configure Forge with API providers, models, and preferences.
+ *
+ * @returns The configured `ForgeConfig` object.
+ */
 export async function runSetupWizard(): Promise<ForgeConfig> {
   const { select, checkbox, password, input } = await import("@inquirer/prompts");
   const { configureSkillsForSetup } = await import("./skills/setup.js");

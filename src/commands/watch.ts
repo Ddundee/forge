@@ -7,7 +7,13 @@ import { resolveAttachTarget } from "./attach.js";
 
 const DEFAULT_PROJECTS_ROOT = path.join(os.homedir(), ".claude", "projects");
 
-/** Locate a session transcript under ~/.claude/projects (claude-code encodes the cwd as the dir name). */
+/**
+ * Locates a session transcript under the Claude projects directory.
+ *
+ * @param claudeSessionId - The session identifier to match
+ * @param projectsRoot - The root directory that contains Claude project subdirectories
+ * @returns The first matching transcript path, or `undefined` if no match is found
+ */
 export function findTranscript(claudeSessionId: string, projectsRoot = DEFAULT_PROJECTS_ROOT): string | undefined {
   if (!fs.existsSync(projectsRoot)) return undefined;
   for (const dir of fs.readdirSync(projectsRoot)) {
@@ -17,6 +23,13 @@ export function findTranscript(claudeSessionId: string, projectsRoot = DEFAULT_P
   return undefined;
 }
 
+/**
+ * Parses and prints a formatted representation of a Claude session event.
+ *
+ * Assistant messages display text blocks in cyan and tool use blocks (with command or input preview) in yellow.
+ * User messages display in green. Output is truncated to 200 characters for text and 120 characters for tool previews.
+ * Invalid JSON input is silently ignored.
+ */
 function printEvent(line: string): void {
   let entry: Record<string, any>;
   try { entry = JSON.parse(line); } catch { return; }
@@ -37,6 +50,13 @@ function printEvent(line: string): void {
   }
 }
 
+/**
+ * Watches a Claude session transcript and prints new events as they are appended.
+ *
+ * If no session ID is provided, the active attach target is used. The watch ends only when the process is interrupted.
+ *
+ * @param claudeSessionId - The session ID to watch.
+ */
 export async function watchSession(claudeSessionId?: string): Promise<void> {
   const id = claudeSessionId
     ?? resolveAttachTarget(SESSIONS_DIR, undefined, undefined)?.claudeSessionId;

@@ -13,6 +13,11 @@ export interface AttachTarget {
   active: boolean;
 }
 
+/**
+ * Finds the most recently modified Forge session directory.
+ *
+ * @returns The directory name of the most recently modified Forge session, or `undefined` if none exist.
+ */
 function latestForgeSessionId(sessionsDir: string): string | undefined {
   if (!fs.existsSync(sessionsDir)) return undefined;
   const dirs = fs.readdirSync(sessionsDir)
@@ -22,7 +27,14 @@ function latestForgeSessionId(sessionsDir: string): string | undefined {
   return dirs[0]?.name;
 }
 
-/** Pure resolution logic, unit-testable without spawning anything. */
+/**
+ * Resolves the session details needed to attach to a recorded Claude session.
+ *
+ * @param sessionsDir - Directory containing Forge session data
+ * @param taskId - Task identifier used to select a worker session
+ * @param forgeSessionId - Forge session identifier to use, if provided
+ * @returns The attach target, or `undefined` when no matching session can be found
+ */
 export function resolveAttachTarget(
   sessionsDir: string,
   taskId: string | undefined,
@@ -51,6 +63,12 @@ export function resolveAttachTarget(
   }
 }
 
+/**
+ * Resumes a recorded Claude session in the current terminal.
+ *
+ * @param taskId - The task-specific worker session to attach to.
+ * @param opts.session - The Forge session ID to attach to instead of the latest session.
+ */
 export async function attachSession(taskId?: string, opts: { session?: string } = {}): Promise<void> {
   const target = resolveAttachTarget(SESSIONS_DIR, taskId, opts.session);
   if (!target) {

@@ -24,6 +24,11 @@ export type SdkQueryFn = (params: {
   options: Record<string, unknown>;
 }) => SdkQuery;
 
+/**
+ * Loads the Claude Agent SDK query function.
+ *
+ * @returns The SDK's `query` function.
+ */
 export async function loadSdkQuery(): Promise<SdkQueryFn> {
   const mod = await import("@anthropic-ai/claude-agent-sdk");
   return mod.query as unknown as SdkQueryFn;
@@ -271,9 +276,9 @@ export class ClaudeSession {
 }
 
 /**
- * Hard forge override on top of Claude Code's own permission system: the
- * dangerous-command blocklist that guarded the homegrown bash_exec loop
- * must keep holding when Claude Code executes Bash itself.
+ * Enforces Forge safety rules for Claude Code tool requests.
+ *
+ * @returns A callback that denies blocked Bash commands and sandbox disabling unless explicitly allowed, and allows other tool requests unchanged.
  */
 export function buildCanUseTool() {
   return async (toolName: string, input: Record<string, unknown>) => {
@@ -364,8 +369,9 @@ export interface ClaudeSessionReadyStatus {
 }
 
 /**
- * Setup/doctor probe: can the Agent SDK actually start a session here?
- * Replaces the old `claude --version` / `claude auth status` CLI checks.
+ * Determines whether the Agent SDK can successfully initialize a session in the current environment.
+ *
+ * @returns An object with a `ready` flag and an optional error message if initialization failed.
  */
 export async function checkClaudeSessionReady(
   loadQueryFn: () => Promise<SdkQueryFn> = loadSdkQuery,
