@@ -1,7 +1,7 @@
 // tests/claudeSession.test.ts
 import { MessageStream, type SdkUserMessage } from "../src/claudeSession.js";
 import { ForgeDb } from "../src/db.js";
-import { ClaudeSession, type SdkMessage } from "../src/claudeSession.js";
+import { ClaudeSession, buildCanUseTool, type SdkMessage } from "../src/claudeSession.js";
 
 function userMsg(content: string): SdkUserMessage {
   return { type: "user", message: { role: "user", content }, parent_tool_use_id: null, session_id: "" };
@@ -276,5 +276,36 @@ describe("ClaudeSession failure handling", () => {
     fake.onMessage = (m) => { if (m.message.content === "b") fake.emit(successResult("fresh", 0.12)); };
     const second = await session.send("b");
     expect(second.costUsd).toBeCloseTo(0.02); // baseline advanced to 0.10 by the late result
+  });
+});
+
+describe("buildCanUseTool", () => {
+  const canUseTool = buildCanUseTool() as (
+    toolName: string, input: Record<string, unknown>,
+  ) => Promise<{ behavior: string; message?: string; updatedInput?: unknown }>;
+
+  test("denies blocked bash commands", async () => {
+    const verdict = await canUseTool("Bash", { command: "sudo rm -rf /" });
+    expect(verdict.behavior).toBe("deny");
+    expect(verdict.message).toContain("blocked");
+  });
+
+  test("denies sandbox-disable unless explicitly enabled", async () => {
+    const old = process.env["FORGE_ALLOW_UNSANDBOXED"];
+    delete process.env["FORGE_ALLOW_UNSANDBOXED"];
+    const denied = await canUseTool("Bash", { command: "ls", dangerouslyDisableSandbox: true });
+    expect(denied.behavior).toBe("deny");
+    process.env["FORGE_ALLOW_UNSANDBOXED"] = "1";
+    const allowed = await canUseTool("Bash", { command: "ls", dangerouslyDisableSandbox: true });
+    expect(allowed.behavior).toBe("allow");
+    if (old === undefined) delete process.env["FORGE_ALLOW_UNSANDBOXED"];
+    else process.env["FORGE_ALLOW_UNSANDBOXED"] = old;
+  });
+
+  test("allows ordinary bash and non-bash tools with updatedInput", async () => {
+    const bash = await canUseTool("Bash", { command: "npm test" });
+    expect(bash).toEqual({ behavior: "allow", updatedInput: { command: "npm test" } });
+    const read = await canUseTool("Read", { file_path: "/x" });
+    expect(read).toEqual({ behavior: "allow", updatedInput: { file_path: "/x" } });
   });
 });

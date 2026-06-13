@@ -267,7 +267,26 @@ export class ClaudeSession {
   }
 }
 
-/** Placeholder until the permission-guard task; allows everything. Replaced in Task 8. */
-export function buildCanUseTool(): unknown {
-  return async (_toolName: string, input: Record<string, unknown>) => ({ behavior: "allow" as const, updatedInput: input });
+/**
+ * Hard forge override on top of Claude Code's own permission system: the
+ * dangerous-command blocklist that guarded the homegrown bash_exec loop
+ * must keep holding when Claude Code executes Bash itself.
+ */
+export function buildCanUseTool() {
+  return async (toolName: string, input: Record<string, unknown>) => {
+    if (toolName === "Bash") {
+      const command = String(input["command"] ?? "");
+      if (isBlockedCommand(command)) {
+        // `interrupt` is honored by current SDK versions; harmless extra field otherwise.
+        return { behavior: "deny" as const, message: `Forge safety: command blocked: ${command}`, interrupt: true };
+      }
+      if (input["dangerouslyDisableSandbox"] === true && process.env["FORGE_ALLOW_UNSANDBOXED"] !== "1") {
+        return {
+          behavior: "deny" as const,
+          message: "Forge safety: disabling the sandbox is not permitted (set FORGE_ALLOW_UNSANDBOXED=1 to override)",
+        };
+      }
+    }
+    return { behavior: "allow" as const, updatedInput: input };
+  };
 }
