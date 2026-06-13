@@ -178,3 +178,51 @@ describe("ClaudeSession core", () => {
     expect(db.getLlmCalls(forgeSessionId)[0]["task_id"]).toBe(taskId);
   });
 });
+
+describe("ClaudeSession stream parsing", () => {
+  test("assistant text and tool_use blocks map to live events and tool_calls rows", async () => {
+    const fake = new FakeSdk();
+    const onLiveEvent = jest.fn();
+    fake.onMessage = () => {
+      fake.emit({
+        type: "assistant",
+        message: {
+          content: [
+            { type: "text", text: "Working on it" },
+            { type: "tool_use", id: "t1", name: "Bash", input: { command: "npm test --silent" } },
+            { type: "tool_use", id: "t2", name: "Read", input: { file_path: "/ws/src/index.ts" } },
+          ],
+        },
+      });
+      fake.emit(successResult("done"));
+    };
+    const { session, db, forgeSessionId } = makeSession(fake, { onLiveEvent });
+    // tool_calls.task_id has a FK to tasks(id) and node:sqlite enforces foreign
+    // keys by default, so the referenced task must exist before it is logged.
+    const taskId = db.createTask(forgeSessionId, "task", "coding");
+    await session.send("run tests", { taskId });
+
+    expect(onLiveEvent).toHaveBeenCalledWith("llm", "Working on it");
+    expect(onLiveEvent).toHaveBeenCalledWith("cmd", "npm test --silent");
+    expect(onLiveEvent).toHaveBeenCalledWith("tool", "Read(/ws/src/index.ts)");
+
+    const toolCalls = db.getToolCalls(forgeSessionId);
+    expect(toolCalls).toHaveLength(2);
+    expect(toolCalls[0]["tool_name"]).toBe("Bash");
+    expect(toolCalls[0]["task_id"]).toBe(taskId);
+    // Tool execution happens inside Claude Code; forge logs the invocation, not the result.
+    expect(toolCalls[0]["tool_result"]).toBe("(executed by Claude Code)");
+    expect(toolCalls[1]["tool_name"]).toBe("Read");
+  });
+
+  test("assistant messages without array content are ignored", async () => {
+    const fake = new FakeSdk();
+    fake.onMessage = () => {
+      fake.emit({ type: "assistant", message: { content: "plain string" } });
+      fake.emit(successResult("ok"));
+    };
+    const { session, db, forgeSessionId } = makeSession(fake);
+    await expect(session.send("x")).resolves.toMatchObject({ text: "ok" });
+    expect(db.getToolCalls(forgeSessionId)).toHaveLength(0);
+  });
+});

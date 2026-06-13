@@ -202,8 +202,30 @@ export class ClaudeSession {
     if (msg["type"] === "result") { this.handleResult(msg); return; }
   }
 
-  private handleAssistant(_msg: SdkMessage): void {
-    // Implemented in the stream-parsing task.
+  private handleAssistant(msg: SdkMessage): void {
+    const content = (msg["message"] as Record<string, unknown> | undefined)?.["content"];
+    if (!Array.isArray(content)) return;
+    for (const block of content as Record<string, unknown>[]) {
+      if (block?.["type"] === "text" && typeof block["text"] === "string" && block["text"].trim()) {
+        this.deps.onLiveEvent?.("llm", (block["text"] as string).slice(0, 80));
+      } else if (block?.["type"] === "tool_use") {
+        const name = String(block["name"] ?? "tool");
+        const input = (block["input"] ?? {}) as Record<string, unknown>;
+        if (name === "Bash") {
+          this.deps.onLiveEvent?.("cmd", String(input["command"] ?? "").slice(0, 80));
+        } else {
+          const target = input["file_path"] ?? input["path"] ?? input["pattern"] ?? "";
+          this.deps.onLiveEvent?.("tool", `${name}(${String(target).slice(0, 50)})`);
+        }
+        this.deps.db.logToolCall(
+          this.deps.forgeSessionId,
+          this.pending?.taskId ?? this.deps.taskId,
+          name,
+          input,
+          "(executed by Claude Code)",
+        );
+      }
+    }
   }
 
   private handleResult(msg: SdkMessage): void {
