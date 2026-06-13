@@ -139,6 +139,9 @@ export class ClaudeSession {
         void this.interrupt();
         reject(new Error(`Claude session turn timed out after ${timeoutMs / 1000}s`));
       }, timeoutMs);
+      // Don't let a long pending-turn timeout hold the event loop open after an
+      // abnormal close (mirrors close()'s race timer).
+      timer.unref?.();
       this.pending = { resolve, reject, timer, taskId };
       this.stream.push({
         type: "user",
