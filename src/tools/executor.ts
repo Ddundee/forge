@@ -1,16 +1,7 @@
 import { exec } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
-
-const BLOCKED_PATTERNS = [
-  "rm -rf /", "rm -rf ~", ":(){ :|:& };:", "dd if=/dev/zero",
-  "mkfs", "> /dev/sda", "chmod 777 /", "chown -R", "sudo rm", "sudo dd",
-];
-
-function isBlocked(command: string): boolean {
-  const lower = command.toLowerCase();
-  return BLOCKED_PATTERNS.some(p => lower.includes(p));
-}
+import { isBlockedCommand } from "../safety.js";
 
 function truncateOutput(text: string): string {
   return text.length > 8000
@@ -25,7 +16,7 @@ function bashExec(args: Record<string, unknown>, workspace: string): Promise<str
   const command = String(args["command"] ?? "");
   const timeout = Number(args["timeout"] ?? 60) * 1000;
   if (!command.trim()) return Promise.resolve("ERROR: Empty command");
-  if (isBlocked(command)) return Promise.resolve(`ERROR: Command blocked for safety: ${command}`);
+  if (isBlockedCommand(command)) return Promise.resolve(`ERROR: Command blocked for safety: ${command}`);
   return new Promise((resolve) => {
     exec(
       command,
