@@ -1,7 +1,7 @@
 // tests/claudeSession.test.ts
 import { MessageStream, type SdkUserMessage } from "../src/claudeSession.js";
 import { ForgeDb } from "../src/db.js";
-import { ClaudeSession, buildCanUseTool, type SdkMessage } from "../src/claudeSession.js";
+import { ClaudeSession, buildCanUseTool, checkClaudeSessionReady, type SdkMessage } from "../src/claudeSession.js";
 
 function userMsg(content: string): SdkUserMessage {
   return { type: "user", message: { role: "user", content }, parent_tool_use_id: null, session_id: "" };
@@ -307,5 +307,29 @@ describe("buildCanUseTool", () => {
     expect(bash).toEqual({ behavior: "allow", updatedInput: { command: "npm test" } });
     const read = await canUseTool("Read", { file_path: "/x" });
     expect(read).toEqual({ behavior: "allow", updatedInput: { file_path: "/x" } });
+  });
+});
+
+describe("checkClaudeSessionReady", () => {
+  test("ready when the SDK emits an init message", async () => {
+    const fake = new FakeSdk();
+    setTimeout(() => fake.emit(INIT), 10);
+    const status = await checkClaudeSessionReady(async () => fake.queryFn, 2_000);
+    expect(status).toEqual({ ready: true });
+  });
+
+  test("not ready with error when the SDK throws", async () => {
+    const status = await checkClaudeSessionReady(async () => {
+      throw new Error("Cannot find module '@anthropic-ai/claude-agent-sdk'");
+    }, 2_000);
+    expect(status.ready).toBe(false);
+    expect(status.error).toContain("Cannot find module");
+  });
+
+  test("not ready when init never arrives within the timeout", async () => {
+    const fake = new FakeSdk();
+    const status = await checkClaudeSessionReady(async () => fake.queryFn, 100);
+    expect(status.ready).toBe(false);
+    expect(status.error).toContain("did not start");
   });
 });

@@ -354,3 +354,49 @@ export class ClaudeSessionManager {
     });
   }
 }
+
+export interface ClaudeSessionReadyStatus {
+  ready: boolean;
+  error?: string;
+}
+
+/**
+ * Setup/doctor probe: can the Agent SDK actually start a session here?
+ * Replaces the old `claude --version` / `claude auth status` CLI checks.
+ */
+export async function checkClaudeSessionReady(
+  loadQueryFn: () => Promise<SdkQueryFn> = loadSdkQuery,
+  timeoutMs = 15_000,
+): Promise<ClaudeSessionReadyStatus> {
+  const stream = new MessageStream();
+  try {
+    const queryFn = await loadQueryFn();
+    const q = queryFn({
+      prompt: stream,
+      options: { cwd: process.cwd(), maxTurns: 1, permissionMode: "default", settingSources: [] },
+    });
+    const sawInit = (async () => {
+      for await (const msg of q) {
+        if (msg["type"] === "system" && msg["subtype"] === "init") return true;
+      }
+      return false;
+    })();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(
+        () => reject(new Error(`Claude Code session did not start within ${timeoutMs / 1000}s`)),
+        timeoutMs,
+      );
+    });
+    try {
+      const ready = await Promise.race([sawInit, timeout]);
+      return { ready: Boolean(ready) };
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  } catch (e) {
+    return { ready: false, error: e instanceof Error ? e.message : String(e) };
+  } finally {
+    try { stream.end(); } catch {}
+  }
+}
