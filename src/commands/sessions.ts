@@ -14,8 +14,9 @@ function timeAgo(iso: string): string {
   return `${Math.floor(secs / 86400)}d ago`;
 }
 
-export async function listSessions(): Promise<void> {
+export async function listSessions(opts: { claude?: boolean } = {}): Promise<void> {
   if (!fs.existsSync(SESSIONS_DIR)) { console.log("No sessions yet."); return; }
+  if (opts.claude) { listClaudeSessions(); return; }
 
   const table = new Table({ head: ["ID", "Idea", "Status", "Cycle", "Cost ($)", "Created"] });
 
@@ -40,4 +41,32 @@ export async function listSessions(): Promise<void> {
     db.close();
   }
   console.log(table.toString());
+}
+
+function listClaudeSessions(): void {
+  const table = new Table({ head: ["Forge", "Role", "Claude session", "Status", "Cwd"] });
+  const attachLines: string[] = [];
+  for (const entry of fs.readdirSync(SESSIONS_DIR).sort().reverse()) {
+    const dbPath = path.join(SESSIONS_DIR, entry, "session.db");
+    if (!fs.existsSync(dbPath)) continue;
+    const db = new ForgeDb(dbPath);
+    for (const row of db.listClaudeSessions()) {
+      table.push([
+        chalk.cyan(String(row["forge_session_id"])),
+        String(row["role"]),
+        String(row["claude_session_id"] ?? "(not started)"),
+        String(row["status"]),
+        String(row["cwd"]),
+      ]);
+      if (row["claude_session_id"]) {
+        attachLines.push(`  cd ${row["cwd"]} && claude --resume ${row["claude_session_id"]}`);
+      }
+    }
+    db.close();
+  }
+  console.log(table.toString());
+  if (attachLines.length) {
+    console.log("\nAttach with:");
+    for (const line of attachLines) console.log(line);
+  }
 }

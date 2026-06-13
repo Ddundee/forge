@@ -82,10 +82,30 @@ program.command("setup").action(async () => {
   await runSetupWizard();
 });
 
-program.command("sessions").action(async () => {
-  const { listSessions } = await import("./commands/sessions.js");
-  await listSessions();
-});
+program
+  .command("sessions")
+  .option("--claude", "List Claude Code sessions driven by Forge")
+  .action(async (opts: { claude?: boolean }) => {
+    const { listSessions } = await import("./commands/sessions.js");
+    await listSessions(opts);
+  });
+
+program
+  .command("attach [taskId]")
+  .description("Take over a Forge-driven Claude session in the interactive claude CLI")
+  .option("-s, --session <id>", "Forge session id (default: latest)")
+  .action(async (taskId: string | undefined, opts: { session?: string }) => {
+    const { attachSession } = await import("./commands/attach.js");
+    await attachSession(taskId, opts);
+  });
+
+program
+  .command("watch [claudeSessionId]")
+  .description("Live-tail a Claude session transcript (read-only)")
+  .action(async (claudeSessionId?: string) => {
+    const { watchSession } = await import("./commands/watch.js");
+    await watchSession(claudeSessionId);
+  });
 
 program.command("resume [sessionId]").action(async (sessionId?: string) => {
   loadKeys();
