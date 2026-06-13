@@ -157,7 +157,9 @@ export class ClaudeSession {
     if (this.closed) return;
     this.closed = true;
     this.stream.end();
-    await Promise.race([this.readLoop, new Promise((r) => setTimeout(r, 5_000))]);
+    let t: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([this.readLoop, new Promise((r) => { t = setTimeout(r, 5_000); t.unref?.(); })]);
+    clearTimeout(t);
     this.deps.db.updateClaudeSession(this.recordId, {
       status: this.failure ? "failed" : "closed",
       closed_at: new Date().toISOString(),
