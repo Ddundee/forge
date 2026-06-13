@@ -203,17 +203,21 @@ export async function runSetupWizard(): Promise<ForgeConfig> {
   }
 
   if (providers.includes(claudeCodeCliLabel)) {
-    const { checkClaudeCodeReady, claudeCodeInstallGuidance } = await import("./claudeCodeDriver.js");
-    const status = await checkClaudeCodeReady();
-    if (!status.installed) {
-      console.log(`\nX  ${claudeCodeInstallGuidance().replace(/\n/g, "\n    ")}\n`);
+    const { checkClaudeSessionReady } = await import("./claudeSession.js");
+    console.log("\nProbing Claude Code session engine…");
+    const status = await checkClaudeSessionReady();
+    if (!status.ready) {
+      console.log(
+        `\nX  Claude Code session could not start${status.error ? `: ${status.error}` : ""}\n\n` +
+        "    Authenticate with one of:\n" +
+        "      export ANTHROPIC_API_KEY=sk-ant-...   (API key)\n" +
+        "      claude login                           (Claude subscription via the claude CLI)\n\n" +
+        "    Install the claude CLI (also used by `forgecli attach`):\n" +
+        "      curl -fsSL https://claude.ai/install.sh | bash\n",
+      );
       process.exit(1);
     }
-    if (!status.authenticated) {
-      console.log("\nX  claude CLI is installed but not authenticated. Run:\n\n    claude auth login\n");
-      process.exit(1);
-    }
-    console.log("\nOK  Claude Code CLI detected and authenticated - no Forge API key needed\n");
+    console.log("\nOK  Claude Code session engine ready\n");
     selectedExternalProfiles.push("claude-code");
   }
 
