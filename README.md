@@ -42,9 +42,9 @@ Your idea
        └─ fails?  → Overseer creates fix tasks, loops back (up to 5 cycles)
 ```
 
-### Agentic tool loop
+### Agentic tool loop (API-model profiles)
 
-The four execution agents — Coding, Integration, Test, and Verification — run as **true agentic loops**. Each has access to four tools and drives itself until the task is done:
+When forge runs on an API-model profile (Anthropic, OpenAI, Gemini, …), the four execution agents — Coding, Integration, Test, and Verification — run as **true agentic loops**. Each has access to four tools and drives itself until the task is done:
 
 | Tool | What it does |
 |---|---|
@@ -58,6 +58,22 @@ Safety guards built in:
 - All file operations are sandboxed to the workspace — no path escapes
 - Max 40 LLM turns and 80 tool calls per agent prevents runaway loops
 - Every tool call is logged to the session database for full auditability
+
+### Claude Code as the engine
+
+With the `claude-code` profile, forge drives persistent Claude Code sessions
+through the Claude Agent SDK instead of its built-in tool loop: one long-lived
+session carries the whole pipeline (spec → architecture → tasks → verification)
+with prompt-cache continuity, and each parallel coding task gets its own
+short-lived worker session. Real token/cost numbers land in `forgecli logs`.
+
+- `forgecli sessions --claude` — list the Claude sessions behind each build
+- `forgecli attach [taskId]` — take over a session in the interactive claude CLI
+- `forgecli watch` — read-only live tail of the main session transcript
+
+Env knobs: `FORGE_CLAUDE_CODE_PERMISSION_MODE` (default `auto`),
+`FORGE_CLAUDE_CODE_MAX_TURNS` (default `40`), `FORGE_CLAUDE_CODE_TIMEOUT_MS`
+(default `300000`), `FORGE_ALLOW_UNSANDBOXED=1` (allow sandbox-disable).
 
 Every run is persisted as a **session** in `~/.forge/sessions/<id>/`. Sessions are resumable after interruption.
 
@@ -108,14 +124,16 @@ Keys are loaded automatically before every build — no need to export environme
 | Profile | Requirement | Notes |
 |---|---|---|
 | `codex` | `codex` CLI installed | Uses an OpenAI Pro subscription; no Forge API key needed |
-| `claude-code` | `claude` CLI installed and `claude auth status` passing | Uses Claude Code programmatically via `claude -p`; no Forge API key needed |
+| `claude-code` | Agent SDK can start a session (`ANTHROPIC_API_KEY` or `claude login`) | Drives persistent Claude Code sessions via the Claude Agent SDK; no Forge API key needed |
 
 Claude Code can be tuned with:
 
 | Env var | Default | Meaning |
 |---|---|---|
-| `FORGE_CLAUDE_CODE_PERMISSION_MODE` | `auto` | Passed to `claude -p --permission-mode` |
-| `FORGE_CLAUDE_CODE_MAX_TURNS` | `40` | Passed to `claude -p --max-turns` |
+| `FORGE_CLAUDE_CODE_PERMISSION_MODE` | `auto` | Session permission mode (the `canUseTool` guard still hard-blocks dangerous Bash) |
+| `FORGE_CLAUDE_CODE_MAX_TURNS` | `40` | Max agentic turns per session |
+| `FORGE_CLAUDE_CODE_TIMEOUT_MS` | `300000` | Per-turn timeout before the session is interrupted |
+| `FORGE_ALLOW_UNSANDBOXED` | unset | Set to `1` to permit `dangerouslyDisableSandbox` Bash calls |
 
 ### Manual config
 

@@ -12,7 +12,8 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "test": "node --experimental-sqlite node_modules/.bin/jest",
-    "test:watch": "node --experimental-sqlite node_modules/.bin/jest --watch"
+    "test:watch": "node --experimental-sqlite node_modules/.bin/jest --watch",
+    "smoke:claude": "node scripts/claude-session-smoke.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^1.0.0",
