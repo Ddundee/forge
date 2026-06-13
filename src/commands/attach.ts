@@ -92,6 +92,16 @@ export async function attachSession(taskId?: string, opts: { session?: string } 
         reject(err);
       }
     });
-    child.on("close", () => resolve());
+    child.on("close", (code, signal) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(
+        signal
+          ? `claude CLI exited via signal ${signal}`
+          : `claude CLI exited with code ${code ?? "unknown"}`,
+      ));
+    });
   });
 }

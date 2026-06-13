@@ -68,6 +68,7 @@ export async function watchSession(claudeSessionId?: string): Promise<void> {
   }
   console.log(`Watching ${transcript} — Ctrl+C to stop.\n`);
   let offset = 0;
+  let pending = "";
   const drain = () => {
     const size = fs.statSync(transcript).size;
     if (size <= offset) return;
@@ -76,7 +77,10 @@ export async function watchSession(claudeSessionId?: string): Promise<void> {
     fs.readSync(fd, buf, 0, buf.length, offset);
     fs.closeSync(fd);
     offset = size;
-    for (const line of buf.toString("utf8").split("\n")) {
+    const chunk = pending + buf.toString("utf8");
+    const lines = chunk.split("\n");
+    pending = lines.pop() ?? "";
+    for (const line of lines) {
       if (line.trim()) printEvent(line);
     }
   };

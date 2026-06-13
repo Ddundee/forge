@@ -17,3 +17,10 @@ test("allows ordinary commands", () => {
 test("pattern list is non-empty", () => {
   expect(BLOCKED_PATTERNS.length).toBeGreaterThan(0);
 });
+
+test("all blocked patterns remain blocked under case changes", () => {
+  for (const pattern of BLOCKED_PATTERNS) {
+    expect(isBlockedCommand(pattern.toLowerCase())).toBe(true);
+    expect(isBlockedCommand(pattern.toUpperCase())).toBe(true);
+  }
+});

@@ -174,11 +174,11 @@ function makeDb(): { db: ForgeDb; sid: string } {
 
 test("claude session lifecycle: create, find, update, list", () => {
   const { db, sid } = makeDb();
-  const id = db.createClaudeSession(sid, "main", "/tmp/ws", { permissionMode: "auto" });
+  const id = db.createClaudeSession(sid, "main", "/tmp/ws", { permissionMode: "default" });
   let row = db.findClaudeSession(sid, "main");
   expect(row?.["status"]).toBe("starting");
   expect(row?.["cwd"]).toBe("/tmp/ws");
-  expect(row?.["permission_mode"]).toBe("auto");
+  expect(row?.["permission_mode"]).toBe("default");
 
   db.updateClaudeSession(id, { claude_session_id: "abc-123", status: "running", model: "claude-sonnet-4-6" });
   row = db.findClaudeSession(sid, "main");
@@ -729,7 +729,7 @@ export class ClaudeSession {
   constructor(private deps: ClaudeSessionDeps) {
     this.role = deps.role;
     this.cwd = deps.cwd;
-    const permissionMode = process.env["FORGE_CLAUDE_CODE_PERMISSION_MODE"] ?? "auto";
+    const permissionMode = process.env["FORGE_CLAUDE_CODE_PERMISSION_MODE"] ?? "default";
     this.recordId = deps.db.createClaudeSession(deps.forgeSessionId, deps.role, deps.cwd, { permissionMode });
     this.query = deps.queryFn({
       prompt: this.stream,
@@ -2225,7 +2225,7 @@ short-lived worker session. Real token/cost numbers land in `forgecli logs`.
 - `forgecli attach [taskId]` — take over a session in the interactive claude CLI
 - `forgecli watch` — read-only live tail of the main session transcript
 
-Env knobs: `FORGE_CLAUDE_CODE_PERMISSION_MODE` (default `auto`),
+Env knobs: `FORGE_CLAUDE_CODE_PERMISSION_MODE` (default `default`; legacy `auto` maps to `default`),
 `FORGE_CLAUDE_CODE_MAX_TURNS` (default `40`), `FORGE_CLAUDE_CODE_TIMEOUT_MS`
 (default `300000`), `FORGE_ALLOW_UNSANDBOXED=1` (allow sandbox-disable).
 ```

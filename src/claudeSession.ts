@@ -24,6 +24,22 @@ export type SdkQueryFn = (params: {
   options: Record<string, unknown>;
 }) => SdkQuery;
 
+const SDK_PERMISSION_MODES = new Set(["default", "acceptEdits", "plan", "delegate", "dontAsk"]);
+
+function claudePermissionMode(): string {
+  const raw = process.env["FORGE_CLAUDE_CODE_PERMISSION_MODE"]?.trim();
+  if (!raw || raw === "auto") return "default";
+  if (raw === "bypassPermissions") {
+    throw new Error("FORGE_CLAUDE_CODE_PERMISSION_MODE=bypassPermissions is not supported because it bypasses Forge safety checks");
+  }
+  if (!SDK_PERMISSION_MODES.has(raw)) {
+    throw new Error(
+      `Invalid FORGE_CLAUDE_CODE_PERMISSION_MODE "${raw}". Expected one of: ${[...SDK_PERMISSION_MODES].join(", ")}`,
+    );
+  }
+  return raw;
+}
+
 /**
  * Loads the Claude Agent SDK query function.
  *
@@ -109,7 +125,7 @@ export class ClaudeSession {
   constructor(private deps: ClaudeSessionDeps) {
     this.role = deps.role;
     this.cwd = deps.cwd;
-    const permissionMode = process.env["FORGE_CLAUDE_CODE_PERMISSION_MODE"] ?? "auto";
+    const permissionMode = claudePermissionMode();
     this.recordId = deps.db.createClaudeSession(deps.forgeSessionId, deps.role, deps.cwd, { permissionMode });
     this.query = deps.queryFn({
       prompt: this.stream,
@@ -378,9 +394,10 @@ export async function checkClaudeSessionReady(
   timeoutMs = 15_000,
 ): Promise<ClaudeSessionReadyStatus> {
   const stream = new MessageStream();
+  let q: SdkQuery | undefined;
   try {
     const queryFn = await loadQueryFn();
-    const q = queryFn({
+    q = queryFn({
       prompt: stream,
       options: { cwd: process.cwd(), maxTurns: 1, permissionMode: "default", settingSources: [] },
     });
@@ -406,6 +423,7 @@ export async function checkClaudeSessionReady(
   } catch (e) {
     return { ready: false, error: e instanceof Error ? e.message : String(e) };
   } finally {
+    try { await q?.interrupt(); } catch {}
     try { stream.end(); } catch {}
   }
 }

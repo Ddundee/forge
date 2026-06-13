@@ -41,6 +41,7 @@ describe("MessageStream", () => {
 class FakeSdk {
   received: SdkUserMessage[] = [];
   interrupted = false;
+  options?: Record<string, unknown>;
   onMessage?: (m: SdkUserMessage) => void;
   private out: SdkMessage[] = [];
   private waiters: { resolve: (r: IteratorResult<SdkMessage>) => void; reject: (e: Error) => void }[] = [];
@@ -64,6 +65,7 @@ class FakeSdk {
   }
 
   queryFn = (params: { prompt: AsyncIterable<SdkUserMessage>; options: Record<string, unknown> }) => {
+    this.options = params.options;
     void (async () => {
       for await (const m of params.prompt) {
         this.received.push(m);
@@ -122,6 +124,40 @@ describe("ClaudeSession core", () => {
     expect(row?.["claude_session_id"]).toBe("abc-123");
     expect(row?.["status"]).toBe("running");
     expect(row?.["model"]).toBe("claude-sonnet-4-6");
+  });
+
+  test("uses SDK permission mode defaults and maps the legacy auto mode", async () => {
+    const old = process.env["FORGE_CLAUDE_CODE_PERMISSION_MODE"];
+    try {
+      delete process.env["FORGE_CLAUDE_CODE_PERMISSION_MODE"];
+      const defaultFake = new FakeSdk();
+      const { db: defaultDb, forgeSessionId: defaultForgeSessionId } = makeSession(defaultFake);
+      expect(defaultFake.options?.["permissionMode"]).toBe("default");
+      expect(defaultDb.findClaudeSession(defaultForgeSessionId, "main")?.["permission_mode"]).toBe("default");
+
+      process.env["FORGE_CLAUDE_CODE_PERMISSION_MODE"] = "auto";
+      const legacyFake = new FakeSdk();
+      const { db: legacyDb, forgeSessionId: legacyForgeSessionId } = makeSession(legacyFake);
+      expect(legacyFake.options?.["permissionMode"]).toBe("default");
+      expect(legacyDb.findClaudeSession(legacyForgeSessionId, "main")?.["permission_mode"]).toBe("default");
+    } finally {
+      if (old === undefined) delete process.env["FORGE_CLAUDE_CODE_PERMISSION_MODE"];
+      else process.env["FORGE_CLAUDE_CODE_PERMISSION_MODE"] = old;
+    }
+  });
+
+  test("rejects invalid SDK permission modes before starting a session", () => {
+    const old = process.env["FORGE_CLAUDE_CODE_PERMISSION_MODE"];
+    try {
+      process.env["FORGE_CLAUDE_CODE_PERMISSION_MODE"] = "invalid";
+      expect(() => makeSession(new FakeSdk())).toThrow("Invalid FORGE_CLAUDE_CODE_PERMISSION_MODE");
+
+      process.env["FORGE_CLAUDE_CODE_PERMISSION_MODE"] = "bypassPermissions";
+      expect(() => makeSession(new FakeSdk())).toThrow("bypasses Forge safety checks");
+    } finally {
+      if (old === undefined) delete process.env["FORGE_CLAUDE_CODE_PERMISSION_MODE"];
+      else process.env["FORGE_CLAUDE_CODE_PERMISSION_MODE"] = old;
+    }
   });
 
   test("send resolves with mapped usage from the result message", async () => {
@@ -292,14 +328,17 @@ describe("buildCanUseTool", () => {
 
   test("denies sandbox-disable unless explicitly enabled", async () => {
     const old = process.env["FORGE_ALLOW_UNSANDBOXED"];
-    delete process.env["FORGE_ALLOW_UNSANDBOXED"];
-    const denied = await canUseTool("Bash", { command: "ls", dangerouslyDisableSandbox: true });
-    expect(denied.behavior).toBe("deny");
-    process.env["FORGE_ALLOW_UNSANDBOXED"] = "1";
-    const allowed = await canUseTool("Bash", { command: "ls", dangerouslyDisableSandbox: true });
-    expect(allowed.behavior).toBe("allow");
-    if (old === undefined) delete process.env["FORGE_ALLOW_UNSANDBOXED"];
-    else process.env["FORGE_ALLOW_UNSANDBOXED"] = old;
+    try {
+      delete process.env["FORGE_ALLOW_UNSANDBOXED"];
+      const denied = await canUseTool("Bash", { command: "ls", dangerouslyDisableSandbox: true });
+      expect(denied.behavior).toBe("deny");
+      process.env["FORGE_ALLOW_UNSANDBOXED"] = "1";
+      const allowed = await canUseTool("Bash", { command: "ls", dangerouslyDisableSandbox: true });
+      expect(allowed.behavior).toBe("allow");
+    } finally {
+      if (old === undefined) delete process.env["FORGE_ALLOW_UNSANDBOXED"];
+      else process.env["FORGE_ALLOW_UNSANDBOXED"] = old;
+    }
   });
 
   test("allows ordinary bash and non-bash tools with updatedInput", async () => {
@@ -316,6 +355,7 @@ describe("checkClaudeSessionReady", () => {
     setTimeout(() => fake.emit(INIT), 10);
     const status = await checkClaudeSessionReady(async () => fake.queryFn, 2_000);
     expect(status).toEqual({ ready: true });
+    expect(fake.interrupted).toBe(true);
   });
 
   test("not ready with error when the SDK throws", async () => {
@@ -331,5 +371,6 @@ describe("checkClaudeSessionReady", () => {
     const status = await checkClaudeSessionReady(async () => fake.queryFn, 100);
     expect(status.ready).toBe(false);
     expect(status.error).toContain("did not start");
+    expect(fake.interrupted).toBe(true);
   });
 });

@@ -25,7 +25,6 @@ function timeAgo(iso: string): string {
  *
  * @param opts - Configuration object. Set `claude` to true to list Claude sessions instead of Forge sessions.
  */
-```
 export async function listSessions(opts: { claude?: boolean } = {}): Promise<void> {
   if (!fs.existsSync(SESSIONS_DIR)) { console.log("No sessions yet."); return; }
   if (opts.claude) { listClaudeSessions(); return; }
@@ -61,6 +60,7 @@ export async function listSessions(opts: { claude?: boolean } = {}): Promise<voi
 function listClaudeSessions(): void {
   const table = new Table({ head: ["Forge", "Role", "Claude session", "Status", "Cwd"] });
   const attachLines: string[] = [];
+  const shellQuote = (value: string) => `'${value.replace(/'/g, `'\\''`)}'`;
   for (const entry of fs.readdirSync(SESSIONS_DIR).sort().reverse()) {
     const dbPath = path.join(SESSIONS_DIR, entry, "session.db");
     if (!fs.existsSync(dbPath)) continue;
@@ -74,7 +74,9 @@ function listClaudeSessions(): void {
         String(row["cwd"]),
       ]);
       if (row["claude_session_id"]) {
-        attachLines.push(`  cd ${row["cwd"]} && claude --resume ${row["claude_session_id"]}`);
+        attachLines.push(
+          `  cd ${shellQuote(String(row["cwd"]))} && claude --resume ${String(row["claude_session_id"])}`,
+        );
       }
     }
     db.close();

@@ -12,11 +12,11 @@ function makeDb(): { db: ForgeDb; sid: string } {
 
 test("claude session lifecycle: create, find, update, list", () => {
   const { db, sid } = makeDb();
-  const id = db.createClaudeSession(sid, "main", "/tmp/ws", { permissionMode: "auto" });
+  const id = db.createClaudeSession(sid, "main", "/tmp/ws", { permissionMode: "default" });
   let row = db.findClaudeSession(sid, "main");
   expect(row?.["status"]).toBe("starting");
   expect(row?.["cwd"]).toBe("/tmp/ws");
-  expect(row?.["permission_mode"]).toBe("auto");
+  expect(row?.["permission_mode"]).toBe("default");
 
   db.updateClaudeSession(id, { claude_session_id: "abc-123", status: "running", model: "claude-sonnet-4-6" });
   row = db.findClaudeSession(sid, "main");
@@ -35,6 +35,14 @@ test("findClaudeSession returns the most recent row for a role", () => {
   const second = db.createClaudeSession(sid, "main", "/tmp/b");
   db.updateClaudeSession(second, { created_at: "2999-01-01T00:00:00.000Z" });
   expect(db.findClaudeSession(sid, "main")?.["cwd"]).toBe("/tmp/b");
+});
+
+test("updateClaudeSession rejects empty or invalid updates", () => {
+  const { db, sid } = makeDb();
+  const id = db.createClaudeSession(sid, "main", "/tmp/ws");
+
+  expect(() => db.updateClaudeSession(id, {})).toThrow("at least one field");
+  expect(() => db.updateClaudeSession(id, { role: "worker:t1" })).toThrow("Invalid claude session update field");
 });
 
 test("logLlmCall stores cache token columns and provider override", () => {

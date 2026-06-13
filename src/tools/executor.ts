@@ -15,8 +15,8 @@ function truncateOutput(text: string): string {
     : text;
 }
 
-// Async on purpose: execSync blocks the whole event loop, freezing the live
-// UI and stalling every parallel agent's in-flight LLM call while a build or
+// Async on purpose: execSync blocks the event loop, freezing the live UI and
+// stalling parallel agents during long build or install commands.
 /**
  * Executes a shell command in the workspace and returns its combined output.
  *

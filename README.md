@@ -71,7 +71,7 @@ short-lived worker session. Real token/cost numbers land in `forgecli logs`.
 - `forgecli attach [taskId]` — take over a session in the interactive claude CLI
 - `forgecli watch` — read-only live tail of the main session transcript
 
-Env knobs: `FORGE_CLAUDE_CODE_PERMISSION_MODE` (default `auto`),
+Env knobs: `FORGE_CLAUDE_CODE_PERMISSION_MODE` (default `default`; legacy `auto` maps to `default`),
 `FORGE_CLAUDE_CODE_MAX_TURNS` (default `40`), `FORGE_CLAUDE_CODE_TIMEOUT_MS`
 (default `300000`), `FORGE_ALLOW_UNSANDBOXED=1` (allow sandbox-disable).
 
@@ -130,7 +130,7 @@ Claude Code can be tuned with:
 
 | Env var | Default | Meaning |
 |---|---|---|
-| `FORGE_CLAUDE_CODE_PERMISSION_MODE` | `auto` | Session permission mode (the `canUseTool` guard still hard-blocks dangerous Bash) |
+| `FORGE_CLAUDE_CODE_PERMISSION_MODE` | `default` | SDK permission mode (`default`, `acceptEdits`, `plan`, `delegate`, or `dontAsk`; legacy `auto` maps to `default`) |
 | `FORGE_CLAUDE_CODE_MAX_TURNS` | `40` | Max agentic turns per session |
 | `FORGE_CLAUDE_CODE_TIMEOUT_MS` | `300000` | Per-turn timeout before the session is interrupted |
 | `FORGE_ALLOW_UNSANDBOXED` | unset | Set to `1` to permit `dangerouslyDisableSandbox` Bash calls |

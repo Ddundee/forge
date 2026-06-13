@@ -9,18 +9,22 @@ function setup() {
   let queries = 0;
   const queryFn: SdkQueryFn = (params) => {
     queries++;
-    void (async () => { for await (const _ of params.prompt) { /* drain */ } })();
+    const waiters: Array<(r: IteratorResult<Record<string, unknown>>) => void> = [];
+    let done = false;
+    void (async () => {
+      for await (const _ of params.prompt) { /* drain */ }
+      done = true;
+      for (const resolve of waiters.splice(0)) {
+        resolve({ value: undefined as never, done: true });
+      }
+    })();
     return {
       interrupt: async () => {},
       [Symbol.asyncIterator]() {
-        let done = false;
         return {
           next: () => done
             ? Promise.resolve({ value: undefined as never, done: true as const })
-            : new Promise<IteratorResult<Record<string, unknown>>>((resolve) => {
-                // Resolve done once the drain loop finishes (input ended).
-                setTimeout(() => { done = true; resolve({ value: undefined as never, done: true }); }, 10);
-              }),
+            : new Promise<IteratorResult<Record<string, unknown>>>((resolve) => waiters.push(resolve)),
         };
       },
     };

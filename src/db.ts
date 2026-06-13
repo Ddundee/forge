@@ -185,6 +185,18 @@ function jsonValue(value: unknown): string {
   return JSON.stringify(value ?? null);
 }
 
+const CLAUDE_SESSION_UPDATE_FIELDS = new Set([
+  "claude_session_id",
+  "cwd",
+  "status",
+  "model",
+  "permission_mode",
+  "transcript_path",
+  "error",
+  "created_at",
+  "closed_at",
+]);
+
 export class ForgeDb {
   private db: DatabaseSync;
 
@@ -317,9 +329,19 @@ export class ForgeDb {
   }
 
   updateClaudeSession(id: string, fields: Record<string, unknown>): void {
-    const sets = Object.keys(fields).map(k => `${k} = ?`).join(", ");
+    const entries = Object.entries(fields);
+    if (!entries.length) {
+      throw new Error("updateClaudeSession requires at least one field");
+    }
+    const invalid = entries
+      .map(([key]) => key)
+      .filter((key) => !CLAUDE_SESSION_UPDATE_FIELDS.has(key));
+    if (invalid.length) {
+      throw new Error(`Invalid claude session update field(s): ${invalid.join(", ")}`);
+    }
+    const sets = entries.map(([key]) => `${key} = ?`).join(", ");
     this.db.prepare(`UPDATE claude_sessions SET ${sets}, updated_at = ? WHERE id = ?`)
-      .run(...bindValues([...Object.values(fields), now(), id]));
+      .run(...bindValues([...entries.map(([, value]) => value), now(), id]));
   }
 
   listClaudeSessions(forgeSessionId?: string): Record<string, unknown>[] {
