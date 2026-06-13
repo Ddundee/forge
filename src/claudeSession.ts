@@ -290,3 +290,67 @@ export function buildCanUseTool() {
     return { behavior: "allow" as const, updatedInput: input };
   };
 }
+
+/**
+ * One per Overseer run. Owns the long-lived main session (sequential phases)
+ * and short-lived worker sessions (parallel coding tasks). Promise-memoized:
+ * concurrent first callers (parallel review agents) share one main session.
+ */
+export class ClaudeSessionManager {
+  private mainPromise?: Promise<ClaudeSession>;
+  private workers = new Map<string, Promise<ClaudeSession>>();
+  private queryFnPromise?: Promise<SdkQueryFn>;
+
+  constructor(
+    private db: ForgeDb,
+    private forgeSessionId: string,
+    private workspace: string,
+    private onLiveEvent?: LiveEventFn,
+    private loadQueryFn: () => Promise<SdkQueryFn> = loadSdkQuery,
+  ) {}
+
+  main(): Promise<ClaudeSession> {
+    this.mainPromise ??= this.start("main", this.workspace);
+    return this.mainPromise;
+  }
+
+  worker(taskId: string, cwd: string): Promise<ClaudeSession> {
+    let w = this.workers.get(taskId);
+    if (!w) {
+      w = this.start(`worker:${taskId}`, cwd, taskId);
+      this.workers.set(taskId, w);
+    }
+    return w;
+  }
+
+  async closeWorker(taskId: string): Promise<void> {
+    const w = this.workers.get(taskId);
+    this.workers.delete(taskId);
+    if (w) {
+      try { await (await w).close(); } catch {}
+    }
+  }
+
+  async closeAll(): Promise<void> {
+    const all = [this.mainPromise, ...this.workers.values()];
+    this.mainPromise = undefined;
+    this.workers.clear();
+    await Promise.all(all.filter(Boolean).map(async (p) => {
+      try { await (await p!).close(); } catch {}
+    }));
+  }
+
+  private async start(role: string, cwd: string, taskId?: string): Promise<ClaudeSession> {
+    this.queryFnPromise ??= this.loadQueryFn();
+    const queryFn = await this.queryFnPromise;
+    return new ClaudeSession({
+      queryFn,
+      db: this.db,
+      forgeSessionId: this.forgeSessionId,
+      role,
+      cwd,
+      onLiveEvent: this.onLiveEvent,
+      taskId,
+    });
+  }
+}
