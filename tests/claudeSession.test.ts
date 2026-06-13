@@ -226,3 +226,55 @@ describe("ClaudeSession stream parsing", () => {
     expect(db.getToolCalls(forgeSessionId)).toHaveLength(0);
   });
 });
+
+describe("ClaudeSession failure handling", () => {
+  test("timeout interrupts the query and rejects the send; session survives", async () => {
+    const fake = new FakeSdk();
+    const { session } = makeSession(fake);
+    await expect(session.send("slow", { timeoutMs: 50 })).rejects.toThrow("timed out after 0.05s");
+    expect(fake.interrupted).toBe(true);
+    // Next turn still works on the same session.
+    fake.onMessage = (m) => { if (m.message.content === "next") fake.emit(successResult("recovered")); };
+    await expect(session.send("next")).resolves.toMatchObject({ text: "recovered" });
+  });
+
+  test("error result subtype rejects the send with the subtype", async () => {
+    const fake = new FakeSdk();
+    fake.onMessage = () => fake.emit({
+      type: "result", subtype: "error_max_turns", result: "Reached max turns", total_cost_usd: 0.01, usage: {},
+    });
+    const { session } = makeSession(fake);
+    await expect(session.send("x")).rejects.toThrow("error_max_turns");
+  });
+
+  test("stream crash rejects the pending send and marks the session failed", async () => {
+    const fake = new FakeSdk();
+    const { session, db, forgeSessionId } = makeSession(fake);
+    const p = session.send("x");
+    await tick();
+    fake.crash(new Error("You've hit your session limit · resets 3pm"));
+    await expect(p).rejects.toThrow("session limit");
+    expect(db.findClaudeSession(forgeSessionId, "main")?.["status"]).toBe("failed");
+    // Subsequent sends fail fast with the recorded failure.
+    await expect(session.send("y")).rejects.toThrow("session limit");
+  });
+
+  test("close ends the input stream and marks the session closed", async () => {
+    const fake = new FakeSdk();
+    const { session, db, forgeSessionId } = makeSession(fake);
+    await session.close();
+    expect(db.findClaudeSession(forgeSessionId, "main")?.["status"]).toBe("closed");
+    await expect(session.send("after close")).rejects.toThrow("closed");
+  });
+
+  test("result arriving after timeout is ignored but still advances the cost baseline", async () => {
+    const fake = new FakeSdk();
+    const { session } = makeSession(fake);
+    await expect(session.send("a", { timeoutMs: 30 })).rejects.toThrow("timed out");
+    fake.emit(successResult("late", 0.10)); // late result for the timed-out turn
+    await tick();
+    fake.onMessage = (m) => { if (m.message.content === "b") fake.emit(successResult("fresh", 0.12)); };
+    const second = await session.send("b");
+    expect(second.costUsd).toBeCloseTo(0.02); // baseline advanced to 0.10 by the late result
+  });
+});
