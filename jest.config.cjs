@@ -23,6 +23,7 @@ const config = {
     ],
   },
   testMatch: ["**/tests/**/*.test.ts"],
+  testPathIgnorePatterns: ["/node_modules/", "<rootDir>/.claude/"],
   forceExit: true,
 };
 

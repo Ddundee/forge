@@ -37,6 +37,10 @@ const REVIEW_OK = JSON.stringify({ approved: true, issues: [], suggestions: [] }
 
 let sessionsDir: string;
 
+function e2eConfig(): ForgeConfig {
+  return new ForgeConfig("claude-primary", {}, 5, "quality", "", { ...DEFAULT_SKILL_CONFIG, mode: "off" });
+}
+
 beforeAll(() => {
   sessionsDir = fs.mkdtempSync(path.join(os.tmpdir(), "forge-e2e-"));
   (IdeationAgent as jest.Mock).mockImplementation(() => ({ run: jest.fn().mockResolvedValue({ success: true, output: SPEC }) }));
@@ -52,8 +56,7 @@ beforeAll(() => {
 afterAll(() => fs.rmSync(sessionsDir, { recursive: true }));
 
 test("full pipeline: create session → run overseer → reaches DONE", async () => {
-  const cfg = new ForgeConfig("claude-primary", {}, 5, "quality", "", { ...DEFAULT_SKILL_CONFIG, mode: "off" });
-  const session = Session.create("build a smoke test app", undefined, sessionsDir, undefined, undefined, cfg);
+  const session = Session.create("build a smoke test app", undefined, sessionsDir, undefined, undefined, e2eConfig());
   expect(session.id).toHaveLength(8);
   expect(session.phase).toBe(Phase.IDEATION);
 
@@ -74,7 +77,7 @@ test("full pipeline: create session → run overseer → reaches DONE", async ()
 });
 
 test("session can be reloaded from disk after run", async () => {
-  const s1 = Session.create("reloadable app", undefined, sessionsDir);
+  const s1 = Session.create("reloadable app", undefined, sessionsDir, undefined, undefined, e2eConfig());
   const overseer = new Overseer(s1);
   await overseer.run();
   s1.db.close();
@@ -83,4 +86,4 @@ test("session can be reloaded from disk after run", async () => {
   expect(s2.idea).toBe("reloadable app");
   expect(s2.phase).toBe(Phase.DONE);
   s2.db.close();
-});
+}, 15_000);

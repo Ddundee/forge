@@ -8,7 +8,7 @@
   <a href="LICENSE">
     <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green" />
   </a>
-  <img alt="Node.js" src="https://img.shields.io/badge/node-18%2B-brightgreen" />
+  <img alt="Node.js" src="https://img.shields.io/badge/node-22.5%2B-brightgreen" />
   <a href="https://brew.sh">
     <img alt="Homebrew" src="https://img.shields.io/badge/install-Homebrew-orange" />
   </a>
@@ -90,7 +90,7 @@ brew install forgecli
 
 ### From source
 
-Requires **Node.js 18+**.
+Requires **Node.js 22.5+**.
 
 ```bash
 git clone https://github.com/Ddundee/forge.git
@@ -300,8 +300,8 @@ git clone https://github.com/Ddundee/forge.git
 cd forge
 npm ci
 
-npm test           # run all 76 tests
-npm run build      # compile TypeScript → dist/
+npm test           # run the test suite
+npm run build      # compile TypeScript to dist/
 ```
 
 **Project layout:**
