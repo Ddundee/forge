@@ -73,3 +73,37 @@ test("closeWorker on unknown task id is a no-op", async () => {
   const { manager } = setup();
   await expect(manager.closeWorker("nope")).resolves.toBeUndefined();
 });
+
+test("loadQueryFn is called at most once even when main and workers are started", async () => {
+  const { manager, counts } = setup();
+  await manager.main();
+  await manager.worker("t1", "/tmp/ws/tasks/t1");
+  await manager.worker("t2", "/tmp/ws/tasks/t2");
+  expect(counts.loads).toBe(1);
+  expect(counts.queries).toBe(3);
+});
+
+test("worker records the correct role name in the database", async () => {
+  const { manager, db, sid } = setup();
+  await manager.worker("my-task", "/tmp/ws/tasks/my-task");
+  const row = db.findClaudeSession(sid, "worker:my-task");
+  expect(row).toBeDefined();
+  expect(row?.["role"]).toBe("worker:my-task");
+  expect(row?.["cwd"]).toBe("/tmp/ws/tasks/my-task");
+});
+
+test("closeAll is idempotent", async () => {
+  const { manager } = setup();
+  await manager.main();
+  await manager.closeAll();
+  await expect(manager.closeAll()).resolves.toBeUndefined();
+});
+
+test("calling main() after closeAll creates a fresh session", async () => {
+  const { manager, counts } = setup();
+  await manager.main();
+  await manager.closeAll();
+  const second = await manager.main();
+  expect(counts.queries).toBe(2);
+  expect(second).toBeDefined();
+});

@@ -373,4 +373,216 @@ describe("checkClaudeSessionReady", () => {
     expect(status.error).toContain("did not start");
     expect(fake.interrupted).toBe(true);
   });
+
+  test("timeout error message includes the timeout value in seconds", async () => {
+    const fake = new FakeSdk();
+    const status = await checkClaudeSessionReady(async () => fake.queryFn, 200);
+    expect(status.ready).toBe(false);
+    expect(status.error).toContain("0.2s");
+    expect(fake.interrupted).toBe(true);
+  });
+
+  test("non-init system messages before init do not trigger ready", async () => {
+    const fake = new FakeSdk();
+    setTimeout(() => {
+      fake.emit({ type: "system", subtype: "other", data: "something" });
+      fake.emit(INIT);
+    }, 10);
+    const status = await checkClaudeSessionReady(async () => fake.queryFn, 2_000);
+    expect(status).toEqual({ ready: true });
+    expect(fake.interrupted).toBe(true);
+  });
+});
+
+describe("ClaudeSession tool_use live event variants", () => {
+  test("tool_use with path input emits a targeted tool event", async () => {
+    const fake = new FakeSdk();
+    const onLiveEvent = jest.fn();
+    fake.onMessage = () => {
+      fake.emit({
+        type: "assistant",
+        message: {
+          content: [
+            { type: "tool_use", id: "t1", name: "Glob", input: { path: "/ws/src" } },
+          ],
+        },
+      });
+      fake.emit(successResult("ok"));
+    };
+    const { session } = makeSession(fake, { onLiveEvent });
+    await session.send("find files");
+    expect(onLiveEvent).toHaveBeenCalledWith("tool", "Glob(/ws/src)");
+  });
+
+  test("tool_use with pattern input emits a targeted tool event", async () => {
+    const fake = new FakeSdk();
+    const onLiveEvent = jest.fn();
+    fake.onMessage = () => {
+      fake.emit({
+        type: "assistant",
+        message: {
+          content: [
+            { type: "tool_use", id: "t1", name: "Grep", input: { pattern: "TODO" } },
+          ],
+        },
+      });
+      fake.emit(successResult("ok"));
+    };
+    const { session } = makeSession(fake, { onLiveEvent });
+    await session.send("search code");
+    expect(onLiveEvent).toHaveBeenCalledWith("tool", "Grep(TODO)");
+  });
+
+  test("tool_use with no recognized target input emits an empty target", async () => {
+    const fake = new FakeSdk();
+    const onLiveEvent = jest.fn();
+    fake.onMessage = () => {
+      fake.emit({
+        type: "assistant",
+        message: {
+          content: [
+            { type: "tool_use", id: "t1", name: "UnknownTool", input: { other: "value" } },
+          ],
+        },
+      });
+      fake.emit(successResult("ok"));
+    };
+    const { session } = makeSession(fake, { onLiveEvent });
+    await session.send("do something");
+    expect(onLiveEvent).toHaveBeenCalledWith("tool", "UnknownTool()");
+  });
+
+  test("long text and Bash command live events are truncated", async () => {
+    const fake = new FakeSdk();
+    const onLiveEvent = jest.fn();
+    fake.onMessage = () => {
+      fake.emit({
+        type: "assistant",
+        message: {
+          content: [
+            { type: "text", text: "A".repeat(100) },
+            { type: "tool_use", id: "t1", name: "Bash", input: { command: "npm run " + "x".repeat(100) } },
+          ],
+        },
+      });
+      fake.emit(successResult("ok"));
+    };
+    const { session } = makeSession(fake, { onLiveEvent });
+    await session.send("long events");
+    const llmEvent = onLiveEvent.mock.calls.find(([kind]) => kind === "llm");
+    const cmdEvent = onLiveEvent.mock.calls.find(([kind]) => kind === "cmd");
+    expect(llmEvent).toBeDefined();
+    expect(cmdEvent).toBeDefined();
+    expect((llmEvent![1] as string).length).toBe(80);
+    expect((cmdEvent![1] as string).length).toBe(80);
+  });
+
+  test("whitespace-only text blocks do not emit llm events", async () => {
+    const fake = new FakeSdk();
+    const onLiveEvent = jest.fn();
+    fake.onMessage = () => {
+      fake.emit({
+        type: "assistant",
+        message: {
+          content: [
+            { type: "text", text: "   \n\t  " },
+          ],
+        },
+      });
+      fake.emit(successResult("ok"));
+    };
+    const { session } = makeSession(fake, { onLiveEvent });
+    await session.send("empty text");
+    expect(onLiveEvent).not.toHaveBeenCalledWith("llm", expect.anything());
+  });
+});
+
+describe("ClaudeSession token accounting edge cases", () => {
+  test("NaN total_cost_usd keeps the last baseline and reports zero cost", async () => {
+    const fake = new FakeSdk();
+    fake.onMessage = () => fake.emit({
+      type: "result",
+      subtype: "success",
+      result: "done",
+      total_cost_usd: NaN,
+      usage: {
+        input_tokens: 5,
+        output_tokens: 2,
+        cache_creation_input_tokens: 0,
+        cache_read_input_tokens: 0,
+      },
+    });
+    const { session } = makeSession(fake);
+    const result = await session.send("test");
+    expect(result.costUsd).toBe(0);
+  });
+
+  test("tokensIn includes input tokens plus both cache token types", async () => {
+    const fake = new FakeSdk();
+    fake.onMessage = () => fake.emit({
+      type: "result",
+      subtype: "success",
+      result: "ok",
+      total_cost_usd: 0.05,
+      usage: {
+        input_tokens: 100,
+        output_tokens: 20,
+        cache_creation_input_tokens: 30,
+        cache_read_input_tokens: 50,
+      },
+    });
+    const { session } = makeSession(fake);
+    const result = await session.send("tokens check");
+    expect(result.tokensIn).toBe(180);
+    expect(result.tokensOut).toBe(20);
+    expect(result.cacheRead).toBe(50);
+    expect(result.cacheWrite).toBe(30);
+  });
+
+  test("missing usage fields default to zero", async () => {
+    const fake = new FakeSdk();
+    fake.onMessage = () => fake.emit({
+      type: "result",
+      subtype: "success",
+      result: "ok",
+      total_cost_usd: 0.01,
+      usage: {},
+    });
+    const { session } = makeSession(fake);
+    const result = await session.send("no usage");
+    expect(result.tokensIn).toBe(0);
+    expect(result.tokensOut).toBe(0);
+    expect(result.cacheRead).toBe(0);
+    expect(result.cacheWrite).toBe(0);
+  });
+});
+
+describe("ClaudeSession model tracking", () => {
+  test("model defaults to claude-code before init arrives", async () => {
+    const fake = new FakeSdk();
+    const { session } = makeSession(fake);
+    fake.onMessage = () => fake.emit(successResult("ok", 0.01));
+    const result = await session.send("check model");
+    expect(result.model).toBe("claude-code");
+  });
+
+  test("model from init message is used in subsequent turn results", async () => {
+    const fake = new FakeSdk();
+    const { session } = makeSession(fake);
+    fake.emit({ type: "system", subtype: "init", session_id: "s-1", model: "claude-opus-4-5" });
+    await tick();
+    fake.onMessage = () => fake.emit(successResult("ok", 0.01));
+    const result = await session.send("check model");
+    expect(result.model).toBe("claude-opus-4-5");
+  });
+
+  test("init message without model leaves the default model unchanged", async () => {
+    const fake = new FakeSdk();
+    const { session } = makeSession(fake);
+    fake.emit({ type: "system", subtype: "init", session_id: "s-2" });
+    await tick();
+    fake.onMessage = () => fake.emit(successResult("ok", 0.01));
+    const result = await session.send("no model field");
+    expect(result.model).toBe("claude-code");
+  });
 });
