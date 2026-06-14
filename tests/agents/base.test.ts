@@ -11,15 +11,11 @@ jest.mock("../../src/codexDriver.js", () => ({
   })),
 }));
 
-jest.mock("../../src/claudeCodeDriver.js", () => ({
-  ClaudeCodeDriver: jest.fn().mockImplementation(() => ({
-    runTask: jest.fn().mockResolvedValue("claude code output"),
-  })),
-}));
+import { makeFakeClaudeSessions } from "../helpers/fakeClaudeSessions.js";
 
 class ConcreteAgent extends BaseAgent {
-  constructor(router: any, db: any, sessionId: string, onLiveEvent?: any) {
-    super(router, db, sessionId, onLiveEvent);
+  constructor(router: any, db: any, sessionId: string, onLiveEvent?: any, claudeSessions?: any) {
+    super(router, db, sessionId, onLiveEvent, claudeSessions);
   }
   async run(): Promise<AgentResult> {
     const content = await this.call([{ role: "user", content: "hello" }]);
@@ -28,13 +24,14 @@ class ConcreteAgent extends BaseAgent {
 }
 
 class LoopAgent extends BaseAgent {
-  constructor(router: any, db: any, sessionId: string, onLiveEvent?: any) {
-    super(router, db, sessionId, onLiveEvent);
+  constructor(router: any, db: any, sessionId: string, onLiveEvent?: any, claudeSessions?: any) {
+    super(router, db, sessionId, onLiveEvent, claudeSessions);
   }
   async run(args: Record<string, unknown>): Promise<AgentResult> {
     const content = await this.runAgenticLoop(
       [{ role: "system", content: "sys" }, { role: "user", content: "task" }],
       String(args["workspace"] ?? os.tmpdir()),
+      args["taskId"] as string | undefined,
     );
     return { success: true, output: content };
   }
@@ -90,12 +87,21 @@ test("call routes to CodexDriver when model tier resolves to 'codex'", async () 
   expect(mockRouter.complete).not.toHaveBeenCalled();
 });
 
-test("call routes to ClaudeCodeDriver when model tier resolves to 'claude-code'", async () => {
+test("call routes to the main Claude session when model tier resolves to 'claude-code'", async () => {
   mockRouter.modelFor.mockReturnValue("claude-code");
-  const agent = new ConcreteAgent(mockRouter, db, sessionId);
+  const fake = makeFakeClaudeSessions();
+  const agent = new ConcreteAgent(mockRouter, db, sessionId, undefined, fake.manager);
   const result = await agent.run();
   expect(result.output).toBe("claude code output");
+  expect(fake.manager.main).toHaveBeenCalled();
+  expect(fake.manager.worker).not.toHaveBeenCalled();
   expect(mockRouter.complete).not.toHaveBeenCalled();
+});
+
+test("call without a session manager fails fast in claude-code mode", async () => {
+  mockRouter.modelFor.mockReturnValue("claude-code");
+  const agent = new ConcreteAgent(mockRouter, db, sessionId);
+  await expect(agent.run()).rejects.toThrow("Claude session manager");
 });
 
 test("call logs CODEX_CALL event when in codex mode", async () => {
@@ -108,7 +114,8 @@ test("call logs CODEX_CALL event when in codex mode", async () => {
 
 test("call logs CLAUDE_CODE_CALL event when in claude-code mode", async () => {
   mockRouter.modelFor.mockReturnValue("claude-code");
-  const agent = new ConcreteAgent(mockRouter, db, sessionId);
+  const fake = makeFakeClaudeSessions();
+  const agent = new ConcreteAgent(mockRouter, db, sessionId, undefined, fake.manager);
   await agent.run();
   const events = db.getEvents(sessionId);
   expect(events.some((e) => String(e["phase"]) === "CLAUDE_CODE_CALL")).toBe(true);
@@ -127,14 +134,31 @@ test("runAgenticLoop routes to CodexDriver when model is codex", async () => {
   }
 });
 
-test("runAgenticLoop routes to ClaudeCodeDriver when model is claude-code", async () => {
+test("runAgenticLoop uses a worker session when a taskId is present", async () => {
   mockRouter.modelFor.mockReturnValue("claude-code");
+  const fake = makeFakeClaudeSessions();
   const tmpWs = fs.mkdtempSync(path.join(os.tmpdir(), "forge-test-ws-"));
   try {
-    const agent = new LoopAgent(mockRouter, db, sessionId);
+    const agent = new LoopAgent(mockRouter, db, sessionId, undefined, fake.manager);
+    const result = await agent.run({ workspace: tmpWs, taskId: "task-7" });
+    expect(result.output).toBe("claude code output");
+    expect(fake.manager.worker).toHaveBeenCalledWith("task-7", tmpWs);
+    expect(fake.sendMock).toHaveBeenCalledWith(expect.any(String), { taskId: "task-7" });
+  } finally {
+    fs.rmSync(tmpWs, { recursive: true, force: true });
+  }
+});
+
+test("runAgenticLoop uses the main session when no taskId is present", async () => {
+  mockRouter.modelFor.mockReturnValue("claude-code");
+  const fake = makeFakeClaudeSessions();
+  const tmpWs = fs.mkdtempSync(path.join(os.tmpdir(), "forge-test-ws-"));
+  try {
+    const agent = new LoopAgent(mockRouter, db, sessionId, undefined, fake.manager);
     const result = await agent.run({ workspace: tmpWs });
     expect(result.output).toBe("claude code output");
-    expect(mockRouter.completeWithTools).not.toHaveBeenCalled();
+    expect(fake.manager.main).toHaveBeenCalled();
+    expect(fake.manager.worker).not.toHaveBeenCalled();
   } finally {
     fs.rmSync(tmpWs, { recursive: true, force: true });
   }
@@ -170,7 +194,8 @@ test("call fires onLiveEvent with kind 'llm' when model is codex", async () => {
 test("call fires onLiveEvent with kind 'llm' when model is claude-code", async () => {
   mockRouter.modelFor.mockReturnValue("claude-code");
   const events: Array<{ kind: string; msg: string }> = [];
-  const agent = new ConcreteAgent(mockRouter, db, sessionId, (kind: string, msg: string) => events.push({ kind, msg }));
+  const fake = makeFakeClaudeSessions();
+  const agent = new ConcreteAgent(mockRouter, db, sessionId, (kind: string, msg: string) => events.push({ kind, msg }), fake.manager);
   await agent.run();
   const llmEvents = events.filter(e => e.kind === "llm");
   expect(llmEvents.length).toBeGreaterThanOrEqual(1);

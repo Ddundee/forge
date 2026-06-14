@@ -2,6 +2,9 @@
 const config = {
   testEnvironment: "node",
   moduleNameMapper: {
+    // chalk v5 is ESM-only and breaks the CJS test loader; stub it for tests
+    // that import a chalk-using module directly (e.g. commands/*).
+    "^chalk$": "<rootDir>/tests/helpers/chalkStub.ts",
     "^(\\.{1,2}/.*)\\.js$": "$1",
   },
   transform: {

@@ -1,31 +1,34 @@
 import { exec } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
+import { isBlockedCommand } from "../safety.js";
 
-const BLOCKED_PATTERNS = [
-  "rm -rf /", "rm -rf ~", ":(){ :|:& };:", "dd if=/dev/zero",
-  "mkfs", "> /dev/sda", "chmod 777 /", "chown -R", "sudo rm", "sudo dd",
-];
-
-function isBlocked(command: string): boolean {
-  const lower = command.toLowerCase();
-  return BLOCKED_PATTERNS.some(p => lower.includes(p));
-}
-
+/**
+ * Truncates long text to a fixed-size preview.
+ *
+ * @param text - The text to truncate
+ * @returns The original text, or a preview containing the first and last 4000 characters when the text is longer than 8000 characters
+ */
 function truncateOutput(text: string): string {
   return text.length > 8000
     ? text.slice(0, 4000) + "\n... [truncated] ...\n" + text.slice(-4000)
     : text;
 }
 
-// Async on purpose: execSync blocks the whole event loop, freezing the live
-// UI and stalling every parallel agent's in-flight LLM call while a build or
-// install command runs.
+// Async on purpose: execSync blocks the event loop, freezing the live UI and
+// stalling parallel agents during long build or install commands.
+/**
+ * Executes a shell command in the workspace and returns its combined output.
+ *
+ * @param args - Tool arguments containing `command` and optional `timeout`.
+ * @param workspace - The working directory used for command execution.
+ * @returns The command output followed by an exit-code suffix, or an error message if the command is empty or blocked.
+ */
 function bashExec(args: Record<string, unknown>, workspace: string): Promise<string> {
   const command = String(args["command"] ?? "");
   const timeout = Number(args["timeout"] ?? 60) * 1000;
   if (!command.trim()) return Promise.resolve("ERROR: Empty command");
-  if (isBlocked(command)) return Promise.resolve(`ERROR: Command blocked for safety: ${command}`);
+  if (isBlockedCommand(command)) return Promise.resolve(`ERROR: Command blocked for safety: ${command}`);
   return new Promise((resolve) => {
     exec(
       command,

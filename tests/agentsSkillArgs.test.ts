@@ -14,12 +14,6 @@ jest.mock("../src/codexDriver.js", () => ({
   })),
 }));
 
-jest.mock("../src/claudeCodeDriver.js", () => ({
-  ClaudeCodeDriver: jest.fn().mockImplementation(() => ({
-    runTask: jest.fn().mockResolvedValue("claude code output"),
-  })),
-}));
-
 const ARCH = JSON.stringify({ stack: { language: "TypeScript" }, test_framework: "vitest" });
 const SPEC = JSON.stringify({ name: "todo app" });
 

@@ -11,11 +11,7 @@ jest.mock("../../src/codexDriver.js", () => ({
   })),
 }));
 
-jest.mock("../../src/claudeCodeDriver.js", () => ({
-  ClaudeCodeDriver: jest.fn().mockImplementation(() => ({
-    runTask: jest.fn().mockResolvedValue("claude code output"),
-  })),
-}));
+import { makeFakeClaudeSessions } from "../helpers/fakeClaudeSessions.js";
 
 function makeRouter(content: string) {
   return {
@@ -130,9 +126,10 @@ test("DeployAgent routes valid deploy targets through CodexDriver in codex mode"
   expect(router.completeWithTools).not.toHaveBeenCalled();
 });
 
-test("DeployAgent routes valid deploy targets through ClaudeCodeDriver in claude-code mode", async () => {
+test("DeployAgent routes valid deploy targets through the Claude session in claude-code mode", async () => {
   const router = makeClaudeCodeRouter();
-  const agent = new DeployAgent(router, db, sessionId);
+  const fake = makeFakeClaudeSessions();
+  const agent = new DeployAgent(router, db, sessionId, undefined, fake.manager);
   const result = await agent.run({ workspace: "/tmp", architecture: "{}", target: "vercel" });
   expect(result.success).toBe(true);
   expect(result.output).toBe("claude code output");

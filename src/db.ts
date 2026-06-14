@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS llm_calls (
     tokens_in INTEGER NOT NULL DEFAULT 0,
     tokens_out INTEGER NOT NULL DEFAULT 0,
     cost_usd REAL NOT NULL DEFAULT 0.0,
+    cache_read_tokens INTEGER NOT NULL DEFAULT 0,
+    cache_write_tokens INTEGER NOT NULL DEFAULT 0,
     response TEXT,
     created_at TEXT NOT NULL
 );
@@ -128,6 +130,21 @@ CREATE TABLE IF NOT EXISTS skill_injections (
     char_count INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS claude_sessions (
+    id TEXT PRIMARY KEY,
+    forge_session_id TEXT NOT NULL REFERENCES sessions(id),
+    role TEXT NOT NULL,
+    claude_session_id TEXT,
+    cwd TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'starting',
+    model TEXT,
+    permission_mode TEXT,
+    transcript_path TEXT,
+    error TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    closed_at TEXT
+);
 CREATE INDEX IF NOT EXISTS idx_tasks_session ON tasks(session_id, status);
 CREATE INDEX IF NOT EXISTS idx_events_session ON events(session_id, timestamp);
 CREATE INDEX IF NOT EXISTS idx_llm_calls_session ON llm_calls(session_id, created_at);
@@ -139,6 +156,10 @@ CREATE INDEX IF NOT EXISTS idx_skill_audits_session ON skill_audits(session_id, 
 CREATE INDEX IF NOT EXISTS idx_skill_selections_session ON skill_selections(session_id, attempt, candidate_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_skill_installations_session ON skill_installations(session_id, attempt, selection_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_skill_injections_session ON skill_injections(session_id, attempt, selection_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_claude_sessions_forge
+  ON claude_sessions(forge_session_id, role, created_at);
+CREATE INDEX IF NOT EXISTS idx_claude_sessions_claude
+  ON claude_sessions(claude_session_id);
 `;
 
 // Short ids are user-facing (sessions, tasks). High-volume log tables use the
@@ -164,6 +185,18 @@ function jsonValue(value: unknown): string {
   return JSON.stringify(value ?? null);
 }
 
+const CLAUDE_SESSION_UPDATE_FIELDS = new Set([
+  "claude_session_id",
+  "cwd",
+  "status",
+  "model",
+  "permission_mode",
+  "transcript_path",
+  "error",
+  "created_at",
+  "closed_at",
+]);
+
 export class ForgeDb {
   private db: DatabaseSync;
 
@@ -173,6 +206,16 @@ export class ForgeDb {
     // stalling on fsync; harmless for in-memory DBs.
     try { this.db.exec("PRAGMA journal_mode = WAL; PRAGMA synchronous = NORMAL;"); } catch {}
     this.db.exec(SCHEMA);
+    this.ensureColumn("llm_calls", "cache_read_tokens", "cache_read_tokens INTEGER NOT NULL DEFAULT 0");
+    this.ensureColumn("llm_calls", "cache_write_tokens", "cache_write_tokens INTEGER NOT NULL DEFAULT 0");
+  }
+
+  /** SQLite has no ADD COLUMN IF NOT EXISTS; check pragma first so old session DBs migrate safely. */
+  private ensureColumn(table: string, column: string, ddl: string): void {
+    const cols = this.db.prepare(`PRAGMA table_info(${table})`).all() as { name?: string }[];
+    if (!cols.some((c) => c.name === column)) {
+      this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+    }
   }
 
   createSession(idea: string, id?: string, configJson = "{}"): string {
@@ -242,19 +285,78 @@ export class ForgeDb {
 
   logLlmCall(
     sessionId: string,
-    data: { model: string; tokensIn: number; tokensOut: number; costUsd: number; response: string },
+    data: {
+      model: string; tokensIn: number; tokensOut: number; costUsd: number; response: string;
+      cacheRead?: number; cacheWrite?: number; provider?: string;
+    },
     taskId?: string,
   ): void {
     this.db.prepare(
-      "INSERT INTO llm_calls (id, task_id, session_id, provider, model, tokens_in, tokens_out, cost_usd, response, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
-    ).run(...bindValues([logId(), taskId ?? null, sessionId, data.model.split("/")[0], data.model,
-      data.tokensIn, data.tokensOut, data.costUsd, data.response, now()]));
+      "INSERT INTO llm_calls (id, task_id, session_id, provider, model, tokens_in, tokens_out, cost_usd, cache_read_tokens, cache_write_tokens, response, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+    ).run(...bindValues([logId(), taskId ?? null, sessionId, data.provider ?? data.model.split("/")[0], data.model,
+      data.tokensIn, data.tokensOut, data.costUsd, data.cacheRead ?? 0, data.cacheWrite ?? 0, data.response, now()]));
   }
 
   logToolCall(sessionId: string, taskId: string | undefined, toolName: string, toolArgs: unknown, toolResult: string): void {
     this.db.prepare(
       "INSERT INTO tool_calls (id, session_id, task_id, tool_name, tool_args, tool_result, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)"
     ).run(...bindValues([logId(), sessionId, taskId ?? null, toolName, jsonValue(toolArgs), toolResult, now()]));
+  }
+
+  getLlmCalls(sessionId: string): Record<string, unknown>[] {
+    return this.db.prepare(
+      "SELECT * FROM llm_calls WHERE session_id = ? ORDER BY created_at"
+    ).all(sessionId) as any[];
+  }
+
+  getToolCalls(sessionId: string): Record<string, unknown>[] {
+    return this.db.prepare(
+      "SELECT * FROM tool_calls WHERE session_id = ? ORDER BY created_at"
+    ).all(sessionId) as any[];
+  }
+
+  createClaudeSession(
+    forgeSessionId: string,
+    role: string,
+    cwd: string,
+    fields: { model?: string; permissionMode?: string } = {},
+  ): string {
+    const id = logId();
+    this.db.prepare(
+      "INSERT INTO claude_sessions (id, forge_session_id, role, cwd, status, model, permission_mode, created_at, updated_at) VALUES (?, ?, ?, ?, 'starting', ?, ?, ?, ?)"
+    ).run(...bindValues([id, forgeSessionId, role, cwd, fields.model ?? null, fields.permissionMode ?? null, now(), now()]));
+    return id;
+  }
+
+  updateClaudeSession(id: string, fields: Record<string, unknown>): void {
+    const entries = Object.entries(fields);
+    if (!entries.length) {
+      throw new Error("updateClaudeSession requires at least one field");
+    }
+    const invalid = entries
+      .map(([key]) => key)
+      .filter((key) => !CLAUDE_SESSION_UPDATE_FIELDS.has(key));
+    if (invalid.length) {
+      throw new Error(`Invalid claude session update field(s): ${invalid.join(", ")}`);
+    }
+    const sets = entries.map(([key]) => `${key} = ?`).join(", ");
+    this.db.prepare(`UPDATE claude_sessions SET ${sets}, updated_at = ? WHERE id = ?`)
+      .run(...bindValues([...entries.map(([, value]) => value), now(), id]));
+  }
+
+  listClaudeSessions(forgeSessionId?: string): Record<string, unknown>[] {
+    if (forgeSessionId) {
+      return this.db.prepare(
+        "SELECT * FROM claude_sessions WHERE forge_session_id = ? ORDER BY created_at"
+      ).all(forgeSessionId) as any[];
+    }
+    return this.db.prepare("SELECT * FROM claude_sessions ORDER BY created_at").all() as any[];
+  }
+
+  findClaudeSession(forgeSessionId: string, role: string): Record<string, unknown> | undefined {
+    return this.db.prepare(
+      "SELECT * FROM claude_sessions WHERE forge_session_id = ? AND role = ? ORDER BY created_at DESC LIMIT 1"
+    ).get(forgeSessionId, role) as any;
   }
 
   saveArtifact(sessionId: string, filePath: string, content: string): void {

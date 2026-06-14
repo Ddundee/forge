@@ -7,13 +7,8 @@ import { LLMRouter, ModelTier } from "../router.js";
 import { TOOL_DEFINITIONS } from "../tools/definitions.js";
 import { executeTool } from "../tools/executor.js";
 import { CodexDriver } from "../codexDriver.js";
-import { ClaudeCodeDriver } from "../claudeCodeDriver.js";
-import {
-  type ExternalAgentId,
-  externalAgentEventPhase,
-  externalAgentFor,
-  externalAgentLabel,
-} from "../externalAgents.js";
+import type { ClaudeSessionManager } from "../claudeSession.js";
+import { type ExternalAgentId, externalAgentFor } from "../externalAgents.js";
 import { SKILL_TOOL_DEFINITIONS } from "../skills/toolDefinitions.js";
 import {
   type SkillContextRuntime,
@@ -63,13 +58,13 @@ function extractJson(text: string): string {
 export abstract class BaseAgent {
   protected tier: ModelTier = ModelTier.STANDARD;
   private codexDriver = new CodexDriver();
-  private claudeCodeDriver = new ClaudeCodeDriver();
 
   constructor(
     protected router: LLMRouter,
     protected db: ForgeDb,
     protected sessionId: string,
     protected onLiveEvent?: LiveEventFn,
+    protected claudeSessions?: ClaudeSessionManager,
   ) {}
 
   abstract run(args: Record<string, unknown>): Promise<AgentResult>;
@@ -122,25 +117,31 @@ export abstract class BaseAgent {
     return [...messages.slice(0, insertAt), skillMessage, ...messages.slice(insertAt)];
   }
 
-  private async runViaExternalAgent(
-    id: ExternalAgentId,
-    messages: CoreMessage[],
-    workdir: string,
-    taskId?: string,
-  ): Promise<string> {
+  private async runViaCodex(messages: CoreMessage[], workdir: string, taskId?: string): Promise<string> {
     const prompt = this.promptFromMessages(messages);
-    const label = externalAgentLabel(id);
-    this.db.logEvent(this.sessionId, externalAgentEventPhase(id), `${this.constructor.name} -> ${label}`);
-    this.onLiveEvent?.("llm", `${this.constructor.name} → ${label}`);
-    const result = id === "codex"
-      ? await this.codexDriver.runTask(prompt, workdir)
-      : await this.claudeCodeDriver.runTask(prompt, workdir);
+    this.db.logEvent(this.sessionId, "CODEX_CALL", `${this.constructor.name} -> codex`);
+    this.onLiveEvent?.("llm", `${this.constructor.name} → codex`);
+    const result = await this.codexDriver.runTask(prompt, workdir);
     this.db.logLlmCall(
       this.sessionId,
-      { model: label, tokensIn: 0, tokensOut: 0, costUsd: 0, response: result },
+      { model: "codex", tokensIn: 0, tokensOut: 0, costUsd: 0, response: result },
       taskId,
     );
     return result;
+  }
+
+  private async runViaClaudeSession(messages: CoreMessage[], taskId?: string, workerCwd?: string): Promise<string> {
+    if (!this.claudeSessions) {
+      throw new Error("claude-code profile requires a Claude session manager (agents must be constructed by the Overseer)");
+    }
+    const prompt = this.promptFromMessages(messages);
+    this.db.logEvent(this.sessionId, "CLAUDE_CODE_CALL", `${this.constructor.name} -> claude-code`);
+    this.onLiveEvent?.("llm", `${this.constructor.name} → claude-code`);
+    const session = workerCwd !== undefined && taskId !== undefined
+      ? await this.claudeSessions.worker(taskId, workerCwd)
+      : await this.claudeSessions.main();
+    const result = await session.send(prompt, { taskId });
+    return result.text;
   }
 
   protected async call(
@@ -150,10 +151,13 @@ export abstract class BaseAgent {
   ): Promise<string> {
     const prepared = this.prepareMessagesWithSkillContext(messages, options.skillContext);
     const externalAgent = this.externalAgentMode();
-    if (externalAgent) {
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), `forge-${externalAgent}-`));
+    if (externalAgent === "claude-code") {
+      return this.runViaClaudeSession(prepared, taskId);
+    }
+    if (externalAgent === "codex") {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "forge-codex-"));
       try {
-        return await this.runViaExternalAgent(externalAgent, prepared, tmpDir, taskId);
+        return await this.runViaCodex(prepared, tmpDir, taskId);
       } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });
       }
@@ -176,8 +180,11 @@ export abstract class BaseAgent {
   ): Promise<string> {
     const prepared = this.prepareMessagesWithSkillContext(messages, options.skillContext);
     const externalAgent = this.externalAgentMode();
-    if (externalAgent) {
-      return this.runViaExternalAgent(externalAgent, prepared, workspace, taskId);
+    if (externalAgent === "claude-code") {
+      return this.runViaClaudeSession(prepared, taskId, taskId ? workspace : undefined);
+    }
+    if (externalAgent === "codex") {
+      return this.runViaCodex(prepared, workspace, taskId);
     }
 
     const toolDefs = options.skillContext

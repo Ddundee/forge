@@ -15,12 +15,6 @@ jest.mock("../src/codexDriver.js", () => ({
   })),
 }));
 
-jest.mock("../src/claudeCodeDriver.js", () => ({
-  ClaudeCodeDriver: jest.fn().mockImplementation(() => ({
-    runTask: jest.fn().mockResolvedValue("claude code output"),
-  })),
-}));
-
 class TestAgent extends BaseAgent {
   async run(): Promise<AgentResult> {
     return { success: true, output: "" };

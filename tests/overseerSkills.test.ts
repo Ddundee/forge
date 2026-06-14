@@ -15,11 +15,21 @@ jest.mock("../src/codexDriver.js", () => ({
   })),
 }));
 
-jest.mock("../src/claudeCodeDriver.js", () => ({
-  ClaudeCodeDriver: jest.fn().mockImplementation(() => ({
-    runTask: jest.fn().mockResolvedValue("claude code output"),
-  })),
-}));
+jest.mock("../src/claudeSession.js", () => {
+  const send = jest.fn().mockResolvedValue({
+    text: "claude code output", model: "claude-code",
+    tokensIn: 0, tokensOut: 0, cacheRead: 0, cacheWrite: 0, costUsd: 0,
+  });
+  const session = { send, interrupt: jest.fn(), close: jest.fn() };
+  return {
+    ClaudeSessionManager: jest.fn().mockImplementation(() => ({
+      main: jest.fn(async () => session),
+      worker: jest.fn(async () => session),
+      closeWorker: jest.fn(async () => {}),
+      closeAll: jest.fn(async () => {}),
+    })),
+  };
+});
 
 const ARCH = JSON.stringify({ stack: { language: "TypeScript" }, test_framework: "vitest", verification_method: "cli" });
 const SPEC = JSON.stringify({ name: "todo app" });
