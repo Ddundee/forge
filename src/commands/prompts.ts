@@ -46,8 +46,11 @@ export async function showPrompts(sessionId?: string, opts?: { follow?: boolean;
   const tick = () => {
     if (!fs.existsSync(lp)) return;
     const content = fs.readFileSync(lp, "utf8");
-    const lines = content.slice(pos).split("\n");
-    pos = content.length;
+    // only consume complete lines; a trailing partial line is still being written
+    const end = content.lastIndexOf("\n") + 1;
+    if (end <= pos) return;
+    const lines = content.slice(pos, end).split("\n");
+    pos = end;
     for (const line of lines) { if (line.trim()) renderEntry(line, opts?.verbose ?? false); }
   };
 

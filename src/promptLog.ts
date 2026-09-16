@@ -33,10 +33,17 @@ export class PromptLogger {
     let userPrompt = "";
     for (let i = entry.messages.length - 1; i >= 0; i--) {
       const m = entry.messages[i];
-      if (m.role === "user" && typeof m.content === "string") {
+      if (m.role !== "user") continue;
+      if (typeof m.content === "string") {
         userPrompt = m.content;
-        break;
+      } else {
+        // multi-part content (text + images/files): keep just the text parts
+        userPrompt = m.content
+          .map((part) => (part.type === "text" ? part.text : ""))
+          .filter(Boolean)
+          .join("\n");
       }
+      break;
     }
     const record: Record<string, unknown> = {
       ts: new Date().toISOString(),

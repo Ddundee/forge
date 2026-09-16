@@ -29,6 +29,10 @@ function makeHandlers(session: Session, feed: ReturnType<typeof startLiveFeed>) 
 
 const program = new Command("forgecli").description("Idea to product in one command.");
 
+// Set once a build/resume has a persisted session, so the top-level error
+// handler only suggests `resume` when there is actually something to resume.
+let activeSessionId: string | undefined;
+
 interface BuildCommandOptions {
   deploy?: string;
   maxCycles: string;
@@ -60,6 +64,7 @@ program
     }
     for (const warning of skillOverrides.warnings) console.warn(`Warning: ${warning}`);
     const session = Session.create(idea, opts.deploy, undefined, process.cwd(), catalog, effectiveConfig);
+    activeSessionId = session.id;
     const feed = startLiveFeed(idea, session.maxCycles);
 
     const { onPhaseEvent, onAgentEvent } = makeHandlers(session, feed);
@@ -111,6 +116,7 @@ program.command("resume [sessionId]").action(async (sessionId?: string) => {
   loadKeys();
   const catalog = await getCatalog().catch(() => undefined);
   const session = sessionId ? Session.load(sessionId, undefined, catalog) : Session.loadLast(undefined, catalog);
+  activeSessionId = session.id;
 
   if (session.phase === Phase.DONE || session.phase === Phase.FAILED) {
     const tasks = session.db.getTasks(session.id);
@@ -163,6 +169,6 @@ program
 
 program.parseAsync(process.argv).catch(err => {
   console.error(`\nError: ${err.message}`);
-  console.error("Session saved — resume with: forgecli resume");
+  if (activeSessionId) console.error(`Session saved — resume with: forgecli resume ${activeSessionId}`);
   process.exit(1);
 });

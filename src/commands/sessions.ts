@@ -9,10 +9,11 @@ import { ForgeDb } from "../db.js";
  * Formats an ISO timestamp as relative time.
  *
  * @param iso - The ISO timestamp to format
- * @returns A relative time string such as `"just now"`, `"5m ago"`, `"3h ago"`, or `"2d ago"`
+ * @returns A relative time string such as `"just now"`, `"5m ago"`, `"3h ago"`, or `"2d ago"`, or `"unknown"` for unparseable input
  */
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(diff)) return "unknown";
   const secs = Math.floor(diff / 1000);
   if (secs < 60) return "just now";
   if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;

@@ -125,3 +125,8 @@ test("resolveModel throws a clear error if 'claude-code' model id reaches it", (
     router.complete(ModelTier.FAST, [{ role: "user", content: "hi" }]),
   ).rejects.toThrow('Model id "claude-code" reached LLMRouter');
 });
+
+test("selectForAgent throws a clear error without an AutoSelector", async () => {
+  const router = new LLMRouter();
+  await expect(router.selectForAgent("CodingAgent", "")).rejects.toThrow("call setAutoSelector first");
+});

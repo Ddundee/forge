@@ -1,3 +1,4 @@
+import * as fs from "fs";
 import * as path from "path";
 import chalk, { type ChalkInstance } from "chalk";
 import { SESSIONS_DIR, Session } from "../session.js";
@@ -11,6 +12,8 @@ const PHASE_COLORS: Record<string, ChalkInstance> = {
   INTEGRATION: chalk.green,
   TESTING: chalk.yellowBright,
   VERIFICATION: chalk.greenBright,
+  DEPLOY: chalk.blueBright,
+  DONE: chalk.green,
   FAILED: chalk.red,
 };
 
@@ -19,7 +22,12 @@ export async function showLogs(sessionId?: string): Promise<void> {
   let sid: string;
   if (sessionId) {
     sid = sessionId;
-    db = new ForgeDb(path.join(SESSIONS_DIR, sessionId, "session.db"));
+    const dbPath = path.join(SESSIONS_DIR, sessionId, "session.db");
+    if (!fs.existsSync(dbPath)) {
+      console.log(chalk.red(`Session not found: ${sessionId}`));
+      return;
+    }
+    db = new ForgeDb(dbPath);
   } else {
     const s = Session.loadLast();
     sid = s.id;

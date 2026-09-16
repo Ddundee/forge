@@ -35,7 +35,7 @@ export function transition(current: Phase, next: Phase): Phase {
   const allowed = TRANSITIONS[current] ?? [];
   if (!allowed.includes(next)) {
     throw new InvalidTransitionError(
-      `Cannot go from ${current} to ${next}. Allowed: ${allowed.join(", ")}`
+      `Cannot go from ${current} to ${next}. Allowed: ${allowed.length ? allowed.join(", ") : "(none, terminal phase)"}`
     );
   }
   return next;

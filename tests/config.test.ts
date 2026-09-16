@@ -50,6 +50,18 @@ test("loadKeys sets env vars from file", () => {
   delete process.env["TEST_API_KEY_XYZ"];
 });
 
+test("loadKeys handles export prefix, spaces, and quoted values", () => {
+  const keysFile = path.join(tmpDir, "keys.env");
+  fs.writeFileSync(keysFile, 'export TEST_KEY_A="abc=123"\nTEST_KEY_B = \'xyz\'\n');
+  delete process.env["TEST_KEY_A"];
+  delete process.env["TEST_KEY_B"];
+  loadKeys(keysFile);
+  expect(process.env["TEST_KEY_A"]).toBe("abc=123");
+  expect(process.env["TEST_KEY_B"]).toBe("xyz");
+  delete process.env["TEST_KEY_A"];
+  delete process.env["TEST_KEY_B"];
+});
+
 test("ForgeConfig defaults priority to quality and autoOverseer to empty string", () => {
   const cfg = new ForgeConfig();
   expect(cfg.priority).toBe("quality");

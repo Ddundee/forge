@@ -153,8 +153,11 @@ export function loadKeys(keysFile = KEYS_FILE): void {
   for (const line of fs.readFileSync(keysFile, "utf8").split("\n")) {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) continue;
-    const [key, ...rest] = trimmed.split("=");
-    if (!(key in process.env)) process.env[key] = rest.join("=");
+    const [rawKey, ...rest] = trimmed.split("=");
+    // Tolerate hand-edited dotenv style: `export KEY = "value"`
+    const key = rawKey.replace(/^export\s+/, "").trim();
+    const value = rest.join("=").trim().replace(/^(["'])(.*)\1$/, "$2");
+    if (key && !(key in process.env)) process.env[key] = value;
   }
 }
 
