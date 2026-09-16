@@ -39,3 +39,15 @@ test("multiple calls append lines", () => {
   const lines = fs.readFileSync(lp, "utf8").trim().split("\n");
   expect(lines).toHaveLength(2);
 });
+
+test("log extracts text from multi-part user content", () => {
+  const sessionsDir = path.join(tmpDir, "sessions");
+  const logger = new PromptLogger("sid-parts", sessionsDir);
+  logger.log({
+    agent: "A", tier: "fast", model: "m",
+    messages: [{ role: "user", content: [{ type: "text", text: "part one" }, { type: "text", text: "part two" }] }],
+    response: "r", tokensIn: 1, tokensOut: 1, costUsd: 0,
+  });
+  const entry = JSON.parse(fs.readFileSync(logPath("sid-parts", sessionsDir), "utf8").trim());
+  expect(entry.user_prompt).toBe("part one\npart two");
+});
