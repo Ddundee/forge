@@ -26,7 +26,8 @@ function truncateOutput(text: string): string {
  */
 function bashExec(args: Record<string, unknown>, workspace: string): Promise<string> {
   const command = String(args["command"] ?? "");
-  const timeout = Number(args["timeout"] ?? 60) * 1000;
+  const requested = Number(args["timeout"] ?? 60);
+  const timeout = (Number.isFinite(requested) && requested > 0 ? requested : 60) * 1000;
   if (!command.trim()) return Promise.resolve("ERROR: Empty command");
   if (isBlockedCommand(command)) return Promise.resolve(`ERROR: Command blocked for safety: ${command}`);
   return new Promise((resolve) => {

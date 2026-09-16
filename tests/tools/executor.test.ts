@@ -83,3 +83,9 @@ test("list_dir tolerates dangling symlinks", async () => {
   expect(result).toContain("[f] a.txt");
   expect(result).toContain("[f] broken");
 });
+
+test("bash_exec falls back to default timeout for invalid values", async () => {
+  const result = await executeTool("bash_exec", { command: "echo ok", timeout: "soon" }, workspace);
+  expect(result).toContain("ok");
+  expect(result).toContain("[exit 0]");
+});
