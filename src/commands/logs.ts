@@ -12,6 +12,8 @@ const PHASE_COLORS: Record<string, ChalkInstance> = {
   INTEGRATION: chalk.green,
   TESTING: chalk.yellowBright,
   VERIFICATION: chalk.greenBright,
+  DEPLOY: chalk.blueBright,
+  DONE: chalk.green,
   FAILED: chalk.red,
 };
 
