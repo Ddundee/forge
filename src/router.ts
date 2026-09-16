@@ -77,7 +77,10 @@ export class LLMRouter {
   }
 
   async selectForAgent(agentName: string, recentContext: string): Promise<string> {
-    return this.autoSelector!.selectModel(agentName, recentContext);
+    if (!this.autoSelector) {
+      throw new Error("selectForAgent called without an AutoSelector - call setAutoSelector first");
+    }
+    return this.autoSelector.selectModel(agentName, recentContext);
   }
 
   /**
