@@ -11,8 +11,9 @@ export class CodexDriver {
     fs.mkdirSync(workdir, { recursive: true });
 
     let taskArg: string;
+    let taskFile: string | undefined;
     if (prompt.length > 8_192) {
-      const taskFile = path.join(workdir, ".forge-task.md");
+      taskFile = path.join(workdir, ".forge-task.md");
       fs.writeFileSync(taskFile, prompt, "utf8");
       taskArg = `Read the file .forge-task.md and follow its instructions exactly. Delete the file when done.`;
     } else {
@@ -37,6 +38,8 @@ export class CodexDriver {
         if (settled) return;
         settled = true;
         if (timer) clearTimeout(timer);
+        // codex is asked to delete the task file, but won't on failure or timeout
+        if (taskFile) fs.rmSync(taskFile, { force: true });
         fn();
       };
 
