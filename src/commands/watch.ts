@@ -1,6 +1,7 @@
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { StringDecoder } from "string_decoder";
 import chalk from "chalk";
 import { SESSIONS_DIR } from "../session.js";
 import { resolveAttachTarget } from "./attach.js";
@@ -69,6 +70,9 @@ export async function watchSession(claudeSessionId?: string): Promise<void> {
   console.log(`Watching ${transcript} — Ctrl+C to stop.\n`);
   let offset = 0;
   let pending = "";
+  // a read can end mid-way through a multi-byte character; the decoder holds
+  // those bytes until the rest arrive instead of emitting U+FFFD
+  const decoder = new StringDecoder("utf8");
   const drain = () => {
     const size = fs.statSync(transcript).size;
     if (size <= offset) return;
@@ -77,7 +81,7 @@ export async function watchSession(claudeSessionId?: string): Promise<void> {
     fs.readSync(fd, buf, 0, buf.length, offset);
     fs.closeSync(fd);
     offset = size;
-    const chunk = pending + buf.toString("utf8");
+    const chunk = pending + decoder.write(buf);
     const lines = chunk.split("\n");
     pending = lines.pop() ?? "";
     for (const line of lines) {
