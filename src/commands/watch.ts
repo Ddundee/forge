@@ -72,9 +72,16 @@ export async function watchSession(claudeSessionId?: string): Promise<void> {
   let pending = "";
   // a read can end mid-way through a multi-byte character; the decoder holds
   // those bytes until the rest arrive instead of emitting U+FFFD
-  const decoder = new StringDecoder("utf8");
+  let decoder = new StringDecoder("utf8");
   const drain = () => {
     const size = fs.statSync(transcript).size;
+    if (size < offset) {
+      // file was truncated or replaced; start over rather than waiting forever
+      // for it to grow past the stale offset
+      offset = 0;
+      pending = "";
+      decoder = new StringDecoder("utf8");
+    }
     if (size <= offset) return;
     const fd = fs.openSync(transcript, "r");
     const buf = Buffer.alloc(size - offset);
