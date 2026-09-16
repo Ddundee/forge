@@ -46,7 +46,10 @@ export async function getCatalog(refresh = false): Promise<MdCatalog> {
   const data = await res.json() as MdCatalog;
 
   fs.mkdirSync(path.dirname(CACHE_PATH), { recursive: true });
-  fs.writeFileSync(CACHE_PATH, JSON.stringify(data));
+  // write-then-rename so a crash mid-write never leaves a truncated cache behind
+  const tmpPath = `${CACHE_PATH}.${process.pid}.tmp`;
+  fs.writeFileSync(tmpPath, JSON.stringify(data));
+  fs.renameSync(tmpPath, CACHE_PATH);
   _cached = data;
   return _cached;
 }
