@@ -66,7 +66,8 @@ Reply with ONLY the exact model ID from the list above. Nothing else.`;
         messages: [{ role: "user", content: prompt }],
         abortSignal: AbortSignal.timeout(30_000),
       });
-      const chosen = result.text.trim();
+      // models often decorate the id (`claude-x`, "claude-x", or a trailing period)
+      const chosen = result.text.trim().replace(/^[`"'*\s]+|[`"'*.\s]+$/g, "");
       const valid = this.availableModels.includes(chosen) ? chosen : this.availableModels[0];
       this.cache.set(agentName, valid);
       this.logFn(`AutoSelector: ${agentName} → ${valid}`);
