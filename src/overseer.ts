@@ -22,6 +22,10 @@ import {
   type NoopSkillPipelineCoordinator,
 } from "./skills/pipeline.js";
 
+// Per-task scratch state that must not leak into the merged workspace. Other
+// dotfiles (.gitignore, .env.example, .eslintrc…) are real project files.
+const MERGE_SKIP = new Set([".git", ".forge-task.md", ".DS_Store"]);
+
 type AskUser = (question: string) => Promise<string | undefined>;
 
 export class Overseer {
@@ -353,7 +357,7 @@ export class Overseer {
 
   private copyDir(src: string, dst: string): void {
     for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-      if (entry.name.startsWith(".")) continue;
+      if (MERGE_SKIP.has(entry.name)) continue;
       const srcPath = path.join(src, entry.name);
       const dstPath = path.join(dst, entry.name);
       if (entry.isDirectory()) {

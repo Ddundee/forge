@@ -207,3 +207,20 @@ test("coding phase gives each task an isolated workspace subdir when claude-code
   expect(fs.existsSync(path.join(session.workspace, "output.ts"))).toBe(true);
   expect(fs.existsSync(path.join(session.workspace, "tasks"))).toBe(false);
 });
+
+test("merging task workspaces keeps project dotfiles but skips scratch state", () => {
+  const overseer = new Overseer(makeSession());
+  const tasksDir = path.join(tmpDir, "tasks");
+  const dst = path.join(tmpDir, "merged");
+  fs.mkdirSync(path.join(tasksDir, "t1", ".git"), { recursive: true });
+  fs.mkdirSync(dst, { recursive: true });
+  fs.writeFileSync(path.join(tasksDir, "t1", ".gitignore"), "node_modules\n");
+  fs.writeFileSync(path.join(tasksDir, "t1", ".forge-task.md"), "prompt");
+  fs.writeFileSync(path.join(tasksDir, "t1", ".git", "HEAD"), "ref");
+
+  (overseer as any).mergeTaskDirs(tasksDir, dst);
+
+  expect(fs.existsSync(path.join(dst, ".gitignore"))).toBe(true);
+  expect(fs.existsSync(path.join(dst, ".forge-task.md"))).toBe(false);
+  expect(fs.existsSync(path.join(dst, ".git"))).toBe(false);
+});
