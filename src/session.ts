@@ -111,7 +111,8 @@ export class Session {
   static loadLast(sessionsDir = SESSIONS_DIR, catalog?: MdCatalog): Session {
     if (!fs.existsSync(sessionsDir)) throw new Error("No sessions found");
     const dirs = fs.readdirSync(sessionsDir)
-      .filter(name => fs.statSync(path.join(sessionsDir, name)).isDirectory())
+      // skip stray folders (e.g. a crashed create) so they don't shadow real sessions
+      .filter(name => fs.existsSync(path.join(sessionsDir, name, "session.db")))
       .map(name => ({ name, mtime: fs.statSync(path.join(sessionsDir, name)).mtimeMs }))
       .sort((a, b) => b.mtime - a.mtime);
     if (!dirs.length) throw new Error("No sessions found");
