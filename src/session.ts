@@ -89,8 +89,10 @@ export class Session {
 
   static load(sessionId: string, sessionsDir = SESSIONS_DIR, catalog?: MdCatalog): Session {
     const sessionDir = path.join(sessionsDir, sessionId);
-    if (!fs.existsSync(sessionDir)) throw new Error(`Session ${sessionId} not found`);
-    const db = new ForgeDb(path.join(sessionDir, "session.db"));
+    const dbPath = path.join(sessionDir, "session.db");
+    // check the db file too: opening a missing path would silently create an empty one
+    if (!fs.existsSync(dbPath)) throw new Error(`Session ${sessionId} not found`);
+    const db = new ForgeDb(dbPath);
     const row = db.getSession(sessionId);
     if (!row) throw new Error(`Session ${sessionId} not in database`);
     const cfg = applySessionSkillSnapshot(loadConfig(), row);
