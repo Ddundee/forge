@@ -21,6 +21,15 @@ function timeAgo(iso: string): string {
   return `${Math.floor(secs / 86400)}d ago`;
 }
 
+/** Opens a session database, or returns undefined if it is corrupt or unreadable. */
+function openSessionDb(dbPath: string): ForgeDb | undefined {
+  try {
+    return new ForgeDb(dbPath);
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * Lists Forge sessions in a formatted table, or switches to Claude sessions when requested.
  *
@@ -35,7 +44,11 @@ export async function listSessions(opts: { claude?: boolean } = {}): Promise<voi
   for (const entry of fs.readdirSync(SESSIONS_DIR).sort().reverse()) {
     const dbPath = path.join(SESSIONS_DIR, entry, "session.db");
     if (!fs.existsSync(dbPath)) continue;
-    const db = new ForgeDb(dbPath);
+    const db = openSessionDb(dbPath);
+    if (!db) {
+      table.push([chalk.cyan(entry), chalk.dim("(unreadable session.db)"), chalk.red("? error"), "", "", ""]);
+      continue;
+    }
     for (const row of db.listSessions()) {
       const phase = String(row["phase"]);
       const status = phase === "DONE" ? chalk.green("✓ done")
@@ -65,7 +78,8 @@ function listClaudeSessions(): void {
   for (const entry of fs.readdirSync(SESSIONS_DIR).sort().reverse()) {
     const dbPath = path.join(SESSIONS_DIR, entry, "session.db");
     if (!fs.existsSync(dbPath)) continue;
-    const db = new ForgeDb(dbPath);
+    const db = openSessionDb(dbPath);
+    if (!db) continue;
     for (const row of db.listClaudeSessions()) {
       table.push([
         chalk.cyan(String(row["forge_session_id"])),
