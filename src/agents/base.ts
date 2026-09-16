@@ -42,8 +42,12 @@ function fmtToolArgs(name: string, args: Record<string, unknown>): string {
 function extractJson(text: string): string {
   const trimmed = text.trim();
   try { JSON.parse(trimmed); return trimmed; } catch {}
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (fenced) return fenced[1].trim();
+  // Responses can contain several fences (e.g. a bash snippet before the JSON);
+  // take the first one that actually parses.
+  for (const fenced of trimmed.matchAll(/```(?:json)?\s*([\s\S]*?)```/g)) {
+    const candidate = fenced[1].trim();
+    try { JSON.parse(candidate); return candidate; } catch {}
+  }
   for (const [open, close] of [["{", "}"], ["[", "]"]]) {
     const s = trimmed.indexOf(open);
     const e = trimmed.lastIndexOf(close);

@@ -73,6 +73,13 @@ test("extractJson handles fenced markdown", () => {
   expect(JSON.parse(result)).toEqual({ key: "value" });
 });
 
+test("extractJson skips non-JSON fences before the JSON one", () => {
+  const agent = new ConcreteAgent(mockRouter, db, sessionId);
+  const text = 'Ran:\n```bash\nnpm test\n```\nReport:\n```json\n{"failed": []}\n```';
+  const result = (agent as any).extractJson(text);
+  expect(JSON.parse(result)).toEqual({ failed: [] });
+});
+
 test("extractJson handles embedded JSON in prose", () => {
   const agent = new ConcreteAgent(mockRouter, db, sessionId);
   const result = (agent as any).extractJson('Here is the data: {"key": 42} — done.');
