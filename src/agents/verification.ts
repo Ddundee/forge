@@ -25,6 +25,14 @@ Workflow:
 
 Output ONLY the JSON report as your final message. Do not wrap it in markdown.`;
 
+function toStringList(value: unknown): string[] {
+  if (value === undefined || value === null) return [];
+  const items = Array.isArray(value) ? value : [value];
+  return items
+    .map((item) => (typeof item === "string" ? item : JSON.stringify(item)))
+    .filter((item) => item.trim().length > 0);
+}
+
 export class VerificationAgent extends BaseAgent {
   protected tier = ModelTier.REASONING;
 
@@ -36,13 +44,20 @@ export class VerificationAgent extends BaseAgent {
     ];
     const opts: AgentRunOptions = { skillContext: args["skillContext"] as AgentRunOptions["skillContext"] };
     const response = await this.runAgenticLoop(messages, workspace, undefined, opts);
-    let report: Record<string, unknown[]>;
+    let report: Record<string, string[]>;
     try {
-      report = JSON.parse(this.extractJson(response));
+      const parsed = JSON.parse(this.extractJson(response));
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("not an object");
+      // models sometimes omit keys or return a bare string; coerce to string lists
+      report = {
+        passed: toStringList(parsed["passed"]),
+        failed: toStringList(parsed["failed"]),
+        errors: toStringList(parsed["errors"]),
+      };
     } catch {
       report = { passed: [], failed: ["Verification agent returned malformed report"], errors: [response.slice(0, 300)] };
     }
-    const success = (report["failed"] as unknown[]).length === 0 && (report["errors"] as unknown[]).length === 0;
+    const success = report["failed"].length === 0 && report["errors"].length === 0;
     return { success, output: JSON.stringify(report), error: success ? undefined : "verification_failed" };
   }
 }
