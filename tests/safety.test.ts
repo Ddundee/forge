@@ -55,3 +55,9 @@ test("all blocked patterns remain blocked under case changes", () => {
     expect(isBlockedCommand(pattern.toUpperCase())).toBe(true);
   }
 });
+
+test("swapped rm flag order is blocked", () => {
+  expect(isBlockedCommand("rm -fr /")).toBe(true);
+  expect(isBlockedCommand("rm -fr ~/projects")).toBe(true);
+  expect(isBlockedCommand("rm -fr dist")).toBe(false);
+});
