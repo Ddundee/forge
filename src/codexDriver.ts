@@ -86,10 +86,19 @@ export class CodexDriver {
   }
 }
 
-export async function checkCodexInstalled(): Promise<boolean> {
+export async function checkCodexInstalled(timeoutMs = 10_000): Promise<boolean> {
   return new Promise((resolve) => {
     const child = spawn("codex", ["--version"], { stdio: "ignore" });
-    child.on("close", (code) => resolve(code === 0));
-    child.on("error", () => resolve(false));
+    // a wedged binary (e.g. waiting on an update prompt) must not hang setup
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      resolve(false);
+    }, timeoutMs);
+    const done = (ok: boolean) => {
+      clearTimeout(timer);
+      resolve(ok);
+    };
+    child.on("close", (code) => done(code === 0));
+    child.on("error", () => done(false));
   });
 }

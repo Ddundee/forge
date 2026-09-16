@@ -130,3 +130,11 @@ test("runTask removes .forge-task.md when codex fails", async () => {
   await expect(driver.runTask("x".repeat(9000), tmpDir)).rejects.toThrow("codex exited 1");
   expect(fs.existsSync(path.join(tmpDir, ".forge-task.md"))).toBe(false);
 });
+
+test("checkCodexInstalled returns false and kills codex when --version hangs", async () => {
+  const child = new EventEmitter() as any;
+  child.kill = jest.fn();
+  mockSpawn.mockReturnValueOnce(child);
+  expect(await checkCodexInstalled(20)).toBe(false);
+  expect(child.kill).toHaveBeenCalledWith("SIGKILL");
+});
