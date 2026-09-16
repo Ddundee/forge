@@ -180,3 +180,14 @@ test("loadConfig defaults invalid numeric skill values instead of storing NaN", 
   expect(loaded.skills.promptCharBudget).toBe(DEFAULT_SKILL_CONFIG.promptCharBudget);
   expect(loaded.skills.minInstallCount).toBe(DEFAULT_SKILL_CONFIG.minInstallCount);
 });
+
+test("loadConfig coerces or defaults invalid hand-edited values", () => {
+  const configFile = path.join(tmpDir, "config.toml");
+  fs.writeFileSync(configFile, 'max_cycles = "10"\npriority = "fastest"\n');
+  const cfg = loadConfig(configFile);
+  expect(cfg.maxCycles).toBe(10);
+  expect(cfg.priority).toBe("quality");
+
+  fs.writeFileSync(configFile, "max_cycles = -2\n");
+  expect(loadConfig(configFile).maxCycles).toBe(5);
+});
