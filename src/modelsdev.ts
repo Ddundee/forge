@@ -41,9 +41,20 @@ export async function getCatalog(refresh = false): Promise<MdCatalog> {
     }
   }
 
-  const res = await fetch("https://models.dev/api.json", { signal: AbortSignal.timeout(10_000) });
-  if (!res.ok) throw new Error(`models.dev returned ${res.status}`);
-  const data = await res.json() as MdCatalog;
+  let data: MdCatalog;
+  try {
+    const res = await fetch("https://models.dev/api.json", { signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) throw new Error(`models.dev returned ${res.status}`);
+    data = await res.json() as MdCatalog;
+  } catch (err) {
+    // offline or models.dev down — an expired cache beats no catalog at all
+    const stale = readStaleCache();
+    if (stale) {
+      _cached = stale;
+      return _cached;
+    }
+    throw err;
+  }
 
   fs.mkdirSync(path.dirname(CACHE_PATH), { recursive: true });
   // write-then-rename so a crash mid-write never leaves a truncated cache behind
@@ -52,6 +63,14 @@ export async function getCatalog(refresh = false): Promise<MdCatalog> {
   fs.renameSync(tmpPath, CACHE_PATH);
   _cached = data;
   return _cached;
+}
+
+function readStaleCache(): MdCatalog | null {
+  try {
+    return JSON.parse(fs.readFileSync(CACHE_PATH, "utf8")) as MdCatalog;
+  } catch {
+    return null;
+  }
 }
 
 export const SUPPORTED_PROVIDERS = ["anthropic", "openai", "google", "groq", "mistral"];
