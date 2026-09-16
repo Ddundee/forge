@@ -320,10 +320,13 @@ export class Overseer {
       cycle: this.session.cycle,
     });
 
-    for (const failure of failures) {
-      this.session.db.createTask(this.session.id, `Fix: ${failure}`, "coding");
+    // A report with only `errors` (e.g. the build itself crashed) would
+    // otherwise queue no fix tasks and burn the cycle without coding anything.
+    const fixItems = failures.length ? failures : errors;
+    for (const item of fixItems.length ? fixItems : ["verification failed without details"]) {
+      this.session.db.createTask(this.session.id, `Fix: ${item}`, "coding");
     }
-    this.emit(`Verification failed: ${failures.length} issue(s). Cycle ${this.session.cycle}/${this.session.maxCycles}`);
+    this.emit(`Verification failed: ${fixItems.length} issue(s). Cycle ${this.session.cycle}/${this.session.maxCycles}`);
     this.session.advancePhase(Phase.CODING);
   }
 
