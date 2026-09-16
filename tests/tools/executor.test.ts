@@ -75,3 +75,11 @@ test("unknown tool returns error", async () => {
   const result = await executeTool("unknown_tool", {}, workspace);
   expect(result).toContain("ERROR: Unknown tool");
 });
+
+test("list_dir tolerates dangling symlinks", async () => {
+  fs.writeFileSync(path.join(workspace, "a.txt"), "a");
+  fs.symlinkSync(path.join(workspace, "missing"), path.join(workspace, "broken"));
+  const result = await executeTool("list_dir", { path: "." }, workspace);
+  expect(result).toContain("[f] a.txt");
+  expect(result).toContain("[f] broken");
+});

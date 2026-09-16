@@ -90,7 +90,8 @@ function listDir(args: Record<string, unknown>, workspace: string): string {
   if (!fs.existsSync(target)) return `ERROR: Path not found: ${relPath}`;
   if (!fs.statSync(target).isDirectory()) return `ERROR: Not a directory: ${relPath}`;
   const items = fs.readdirSync(target).sort().map(name => {
-    const isDir = fs.statSync(path.join(target, name)).isDirectory();
+    // lstat so a dangling symlink doesn't throw and abort the whole listing
+    const isDir = fs.lstatSync(path.join(target, name)).isDirectory();
     return `[${isDir ? "d" : "f"}] ${name}`;
   });
   return items.length ? items.join("\n") : "(empty directory)";
