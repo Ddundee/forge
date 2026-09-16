@@ -24,3 +24,7 @@ test("Phase enum values are strings", () => {
   expect(Phase.IDEATION).toBe("IDEATION");
   expect(Phase.CODING).toBe("CODING");
 });
+
+test("transition out of a terminal phase explains there are no allowed targets", () => {
+  expect(() => transition(Phase.DONE, Phase.CODING)).toThrow("Allowed: (none, terminal phase)");
+});
