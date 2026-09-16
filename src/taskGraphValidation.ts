@@ -47,10 +47,14 @@ export function normalizeTaskGraph(value: unknown): PlannedTask[] {
       throw new Error(`Task graph item ${index + 1} is missing a title.`);
     }
 
+    // drop repeated titles and self-references, which can never be satisfied
+    const deps = [...new Set(normalizeDeps(task["deps"] ?? task["dependencies"], index))]
+      .filter((dep) => dep !== title);
+
     return {
       title,
       type: nonEmptyString(task["type"]) ?? "coding",
-      deps: normalizeDeps(task["deps"] ?? task["dependencies"], index),
+      deps,
     };
   });
 }
