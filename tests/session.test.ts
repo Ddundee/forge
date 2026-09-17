@@ -71,3 +71,17 @@ test("create stores config snapshot in session row", () => {
   expect(snapshot).toHaveProperty("skills");
   expect(snapshot.skills).toHaveProperty("mode");
 });
+
+test("loadLast ignores newer directories without a session database", async () => {
+  const s1 = makeSession();
+  await new Promise(r => setTimeout(r, 10));
+  fs.mkdirSync(path.join(tmpDir, "stray"));
+  const last = Session.loadLast(tmpDir);
+  expect(last.id).toBe(s1.id);
+});
+
+test("load does not create an empty database for a directory without one", () => {
+  fs.mkdirSync(path.join(tmpDir, "empty"));
+  expect(() => Session.load("empty", tmpDir)).toThrow("Session empty not found");
+  expect(fs.existsSync(path.join(tmpDir, "empty", "session.db"))).toBe(false);
+});

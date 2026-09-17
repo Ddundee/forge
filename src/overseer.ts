@@ -22,6 +22,10 @@ import {
   type NoopSkillPipelineCoordinator,
 } from "./skills/pipeline.js";
 
+// Per-task scratch state that must not leak into the merged workspace. Other
+// dotfiles (.gitignore, .env.example, .eslintrc…) are real project files.
+const MERGE_SKIP = new Set([".git", ".forge-task.md", ".DS_Store"]);
+
 type AskUser = (question: string) => Promise<string | undefined>;
 
 export class Overseer {
@@ -316,10 +320,13 @@ export class Overseer {
       cycle: this.session.cycle,
     });
 
-    for (const failure of failures) {
-      this.session.db.createTask(this.session.id, `Fix: ${failure}`, "coding");
+    // A report with only `errors` (e.g. the build itself crashed) would
+    // otherwise queue no fix tasks and burn the cycle without coding anything.
+    const fixItems = failures.length ? failures : errors;
+    for (const item of fixItems.length ? fixItems : ["verification failed without details"]) {
+      this.session.db.createTask(this.session.id, `Fix: ${item}`, "coding");
     }
-    this.emit(`Verification failed: ${failures.length} issue(s). Cycle ${this.session.cycle}/${this.session.maxCycles}`);
+    this.emit(`Verification failed: ${fixItems.length} issue(s). Cycle ${this.session.cycle}/${this.session.maxCycles}`);
     this.session.advancePhase(Phase.CODING);
   }
 
@@ -353,7 +360,7 @@ export class Overseer {
 
   private copyDir(src: string, dst: string): void {
     for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
-      if (entry.name.startsWith(".")) continue;
+      if (MERGE_SKIP.has(entry.name)) continue;
       const srcPath = path.join(src, entry.name);
       const dstPath = path.join(dst, entry.name);
       if (entry.isDirectory()) {

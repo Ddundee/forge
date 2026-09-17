@@ -128,12 +128,15 @@ export class ForgeConfig {
 export function loadConfig(configFile = CONFIG_FILE): ForgeConfig {
   if (!fs.existsSync(configFile)) return new ForgeConfig();
   const data = parseToml(fs.readFileSync(configFile, "utf8")) as any;
+  // hand-edited configs: a quoted "10" or a typo'd priority shouldn't leak through
+  const maxCycles = Number(data.max_cycles ?? 5);
+  const priority = ["quality", "speed", "cost"].includes(data.priority) ? data.priority : "quality";
   return new ForgeConfig(
-    data.profile ?? "claude-primary",
-    data.models ?? {},
-    data.max_cycles ?? 5,
-    (data.priority as "quality" | "speed" | "cost") ?? "quality",
-    data.auto_overseer ?? "",
+    typeof data.profile === "string" ? data.profile : "claude-primary",
+    data.models && typeof data.models === "object" ? data.models : {},
+    Number.isInteger(maxCycles) && maxCycles > 0 ? maxCycles : 5,
+    priority,
+    typeof data.auto_overseer === "string" ? data.auto_overseer : "",
     normalizeSkillConfig(data.skills),
   );
 }

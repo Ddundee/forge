@@ -42,8 +42,22 @@ export class DeployAgent extends BaseAgent {
         cmd.join(" "),
         { cwd: workspace, encoding: "utf8", timeout: DEPLOY_TIMEOUT_MS, maxBuffer: 10 * 1024 * 1024 },
         (err, stdout, stderr) => {
-          if (!err) resolve({ success: true, output: stdout });
-          else resolve({ success: false, output: (stdout ?? "") + (stderr ?? ""), error: "deploy_failed" });
+          if (!err) {
+            resolve({ success: true, output: stdout });
+            return;
+          }
+          const output = (stdout ?? "") + (stderr ?? "");
+          // exec kills the child on timeout; say so, since the CLI's own output
+          // is usually just a hanging prompt with no error in it
+          if (err.killed) {
+            resolve({
+              success: false,
+              output: `Deploy timed out after ${DEPLOY_TIMEOUT_MS / 1000}s (the CLI may be waiting for input)\n${output}`,
+              error: "deploy_timeout",
+            });
+            return;
+          }
+          resolve({ success: false, output, error: "deploy_failed" });
         },
       );
     });

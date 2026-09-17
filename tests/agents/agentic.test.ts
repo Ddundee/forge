@@ -66,6 +66,18 @@ test("VerificationAgent parses passed report as success", async () => {
   expect(result.success).toBe(true);
 });
 
+test("VerificationAgent tolerates a report with missing or non-array keys", async () => {
+  const router = makeRouter(JSON.stringify({ passed: ["Build OK"] }));
+  const agent = new VerificationAgent(router, db, sessionId);
+  const ok = await agent.run({ workspace, architecture: "{}", spec: "{}" });
+  expect(ok.success).toBe(true);
+
+  const router2 = makeRouter(JSON.stringify({ failed: "tests failed", errors: [{ file: "a.ts" }] }));
+  const result = await new VerificationAgent(router2, db, sessionId).run({ workspace, architecture: "{}", spec: "{}" });
+  expect(result.success).toBe(false);
+  expect(JSON.parse(result.output)).toEqual({ passed: [], failed: ["tests failed"], errors: ['{"file":"a.ts"}'] });
+});
+
 test("VerificationAgent parses failed report as failure", async () => {
   const report = JSON.stringify({ passed: [], failed: ["Build failed"], errors: ["exit 1"] });
   const router = makeRouter(report);

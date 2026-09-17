@@ -207,3 +207,37 @@ test("coding phase gives each task an isolated workspace subdir when claude-code
   expect(fs.existsSync(path.join(session.workspace, "output.ts"))).toBe(true);
   expect(fs.existsSync(path.join(session.workspace, "tasks"))).toBe(false);
 });
+
+test("merging task workspaces keeps project dotfiles but skips scratch state", () => {
+  const overseer = new Overseer(makeSession());
+  const tasksDir = path.join(tmpDir, "tasks");
+  const dst = path.join(tmpDir, "merged");
+  fs.mkdirSync(path.join(tasksDir, "t1", ".git"), { recursive: true });
+  fs.mkdirSync(dst, { recursive: true });
+  fs.writeFileSync(path.join(tasksDir, "t1", ".gitignore"), "node_modules\n");
+  fs.writeFileSync(path.join(tasksDir, "t1", ".forge-task.md"), "prompt");
+  fs.writeFileSync(path.join(tasksDir, "t1", ".git", "HEAD"), "ref");
+
+  (overseer as any).mergeTaskDirs(tasksDir, dst);
+
+  expect(fs.existsSync(path.join(dst, ".gitignore"))).toBe(true);
+  expect(fs.existsSync(path.join(dst, ".forge-task.md"))).toBe(false);
+  expect(fs.existsSync(path.join(dst, ".git"))).toBe(false);
+});
+
+test("verification failure with only errors still queues fix tasks", async () => {
+  let calls = 0;
+  (VerificationAgent as jest.Mock).mockImplementation(() => ({
+    run: jest.fn().mockImplementation(async () => {
+      calls++;
+      return calls === 1
+        ? { success: false, output: JSON.stringify({ passed: [], failed: [], errors: ["tsc: cannot find module"] }), error: "verification_failed" }
+        : { success: true, output: VERIFY_OK };
+    }),
+  }));
+  const session = makeSession();
+  await new Overseer(session).run();
+  const titles = session.db.getTasks(session.id).map((t) => String(t["title"]));
+  expect(titles).toContain("Fix: tsc: cannot find module");
+  expect(session.phase).toBe(Phase.DONE);
+});

@@ -11,8 +11,9 @@ export class CodexDriver {
     fs.mkdirSync(workdir, { recursive: true });
 
     let taskArg: string;
+    let taskFile: string | undefined;
     if (prompt.length > 8_192) {
-      const taskFile = path.join(workdir, ".forge-task.md");
+      taskFile = path.join(workdir, ".forge-task.md");
       fs.writeFileSync(taskFile, prompt, "utf8");
       taskArg = `Read the file .forge-task.md and follow its instructions exactly. Delete the file when done.`;
     } else {
@@ -37,6 +38,8 @@ export class CodexDriver {
         if (settled) return;
         settled = true;
         if (timer) clearTimeout(timer);
+        // codex is asked to delete the task file, but won't on failure or timeout
+        if (taskFile) fs.rmSync(taskFile, { force: true });
         fn();
       };
 
@@ -83,10 +86,19 @@ export class CodexDriver {
   }
 }
 
-export async function checkCodexInstalled(): Promise<boolean> {
+export async function checkCodexInstalled(timeoutMs = 10_000): Promise<boolean> {
   return new Promise((resolve) => {
     const child = spawn("codex", ["--version"], { stdio: "ignore" });
-    child.on("close", (code) => resolve(code === 0));
-    child.on("error", () => resolve(false));
+    // a wedged binary (e.g. waiting on an update prompt) must not hang setup
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      resolve(false);
+    }, timeoutMs);
+    const done = (ok: boolean) => {
+      clearTimeout(timer);
+      resolve(ok);
+    };
+    child.on("close", (code) => done(code === 0));
+    child.on("error", () => done(false));
   });
 }

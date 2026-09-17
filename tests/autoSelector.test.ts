@@ -88,3 +88,11 @@ test("does not cache the fallback after a failed selection", async () => {
   expect(await selector.selectModel("CodingAgent", "")).toBe("claude-sonnet-4-6");
   expect(mockGenerate).toHaveBeenCalledTimes(2);
 });
+
+test("accepts a model id wrapped in backticks, quotes, or a trailing period", async () => {
+  for (const reply of ["`claude-sonnet-4-6`", '"claude-sonnet-4-6"', "claude-sonnet-4-6.", "**claude-sonnet-4-6**"]) {
+    mockGenerate.mockResolvedValueOnce(fakeResponse(reply));
+    const selector = new AutoSelector("claude-opus-4-8", "quality", MODELS);
+    expect(await selector.selectModel("CodingAgent", "")).toBe("claude-sonnet-4-6");
+  }
+});

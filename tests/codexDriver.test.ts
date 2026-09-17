@@ -86,12 +86,15 @@ test("runTask kills process and rejects on timeout", async () => {
 
 test("runTask writes prompt to .forge-task.md for prompts > 8KB", async () => {
   const longPrompt = "x".repeat(9000);
-  mockSpawn.mockReturnValueOnce(makeChild("done", 0));
+  const taskFile = path.join(tmpDir, ".forge-task.md");
+  let contentAtSpawn: string | undefined;
+  mockSpawn.mockImplementationOnce((() => {
+    contentAtSpawn = fs.readFileSync(taskFile, "utf8");
+    return makeChild("done", 0);
+  }) as any);
   const driver = new CodexDriver();
   await driver.runTask(longPrompt, tmpDir);
-  const taskFile = path.join(tmpDir, ".forge-task.md");
-  expect(fs.existsSync(taskFile)).toBe(true);
-  expect(fs.readFileSync(taskFile, "utf8")).toBe(longPrompt);
+  expect(contentAtSpawn).toBe(longPrompt);
   const [, args] = mockSpawn.mock.calls[0];
   expect((args as string[])[2]).toContain(".forge-task.md");
   expect((args as string[])[2]).not.toBe(longPrompt);
@@ -119,4 +122,19 @@ test("checkCodexInstalled returns false on ENOENT", async () => {
   setImmediate(() => child.emit("error", Object.assign(new Error(), { code: "ENOENT" })));
   mockSpawn.mockReturnValueOnce(child);
   expect(await checkCodexInstalled()).toBe(false);
+});
+
+test("runTask removes .forge-task.md when codex fails", async () => {
+  mockSpawn.mockReturnValueOnce(makeChild("", 1));
+  const driver = new CodexDriver();
+  await expect(driver.runTask("x".repeat(9000), tmpDir)).rejects.toThrow("codex exited 1");
+  expect(fs.existsSync(path.join(tmpDir, ".forge-task.md"))).toBe(false);
+});
+
+test("checkCodexInstalled returns false and kills codex when --version hangs", async () => {
+  const child = new EventEmitter() as any;
+  child.kill = jest.fn();
+  mockSpawn.mockReturnValueOnce(child);
+  expect(await checkCodexInstalled(20)).toBe(false);
+  expect(child.kill).toHaveBeenCalledWith("SIGKILL");
 });
